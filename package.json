@@ -1,0 +1,31 @@
+{
+  "name": "claude-cnthub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered session memory and context management for Claude Code",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "dev:api": "bun run --filter @claude-cnthub/api dev",
+    "dev:web": "bun run --filter @claude-cnthub/web dev",
+    "build": "bun run --filter '*' build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "lint": "bun run --filter '*' lint",
+    "clean": "rm -rf packages/*/dist packages/*/.turbo node_modules/.cache"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "@vitest/coverage-v8": "^2.1.8",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "bun@1.1.38"
+}
