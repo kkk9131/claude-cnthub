@@ -8,7 +8,7 @@ import type {
 
 // Session Fixtures
 export const createSessionFixture = (
-  overrides: Partial<Session> = {},
+  overrides: Partial<Session> = {}
 ): Session => ({
   sessionId: "sess_test123",
   name: "Test Session",
@@ -22,7 +22,7 @@ export const createSessionFixture = (
 });
 
 export const createSessionRequestFixture = (
-  overrides: Partial<CreateSessionRequest> = {},
+  overrides: Partial<CreateSessionRequest> = {}
 ): CreateSessionRequest => ({
   name: "Test Session",
   workingDir: "/tmp/test",
@@ -31,7 +31,7 @@ export const createSessionRequestFixture = (
 
 // Message Fixtures
 export const createMessageFixture = (
-  overrides: Partial<Message> = {},
+  overrides: Partial<Message> = {}
 ): Message => ({
   messageId: "msg_test123",
   sessionId: "sess_test123",
@@ -52,7 +52,7 @@ export const messageFixtures: Message[] = [
 
 // Summary Fixtures
 export const createSummaryFixture = (
-  overrides: Partial<SessionSummary> = {},
+  overrides: Partial<SessionSummary> = {}
 ): SessionSummary => ({
   summaryId: "sum_test123",
   sessionId: "sess_test123",
@@ -72,7 +72,7 @@ export const createSummaryFixture = (
 
 // Work Item Fixtures
 export const createWorkItemFixture = (
-  overrides: Partial<WorkItem> = {},
+  overrides: Partial<WorkItem> = {}
 ): WorkItem => ({
   workItemId: "wi_test123",
   name: "Test Work Item",

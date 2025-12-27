@@ -9,7 +9,7 @@
 - [x] モノレポ構成 (Bun Workspaces) `cc:完了`
 - [x] 共通型定義 (packages/shared) `cc:完了`
 - [x] テスト環境構築 (Vitest) `cc:完了`
-- [ ] Git リポジトリ初期化 `cc:TODO`
+- [x] Git リポジトリ初期化 `cc:完了`
 
 ### 1.2 データベース層
 

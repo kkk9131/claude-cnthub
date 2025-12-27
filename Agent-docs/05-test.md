@@ -275,7 +275,7 @@ test.describe("Critical User Flows", () => {
 
     // 5. メッセージが表示されることを確認
     await expect(page.locator('[data-testid="message-list"]')).toContainText(
-      "Hello Claude",
+      "Hello Claude"
     );
   });
 

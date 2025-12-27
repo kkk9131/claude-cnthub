@@ -9,7 +9,7 @@
 ```typescript
 // packages/api/src/test-utils/fixtures.ts
 export const createSessionFixture = (
-  overrides: Partial<Session> = {},
+  overrides: Partial<Session> = {}
 ): Session => ({
   sessionId: "sess_test123",
   name: "Test Session",
