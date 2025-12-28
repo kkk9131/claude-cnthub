@@ -97,6 +97,7 @@ describe("Type Definitions", () => {
         sessionId: "sess_123",
         type: "user",
         content: "Hello, Claude!",
+        compressed: false,
         timestamp: new Date(),
       };
 
@@ -121,6 +122,7 @@ describe("Type Definitions", () => {
           sessionId: "sess_123",
           type,
           content: "test",
+          compressed: false,
           timestamp: new Date(),
         };
         expect(message.type).toBe(type);
@@ -134,6 +136,8 @@ describe("Type Definitions", () => {
         workItemId: "wi_123",
         name: "Implement authentication",
         status: "in_progress",
+        tags: [],
+        priority: 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -156,6 +160,8 @@ describe("Type Definitions", () => {
           workItemId: "wi_123",
           name: "Test",
           status,
+          tags: [],
+          priority: 0,
           createdAt: new Date(),
           updatedAt: new Date(),
         };

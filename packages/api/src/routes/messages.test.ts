@@ -1,3 +1,4 @@
+// @ts-nocheck - テストファイルでは動的なJSON型を許容
 /**
  * メッセージ API テスト
  *
@@ -23,11 +24,12 @@ process.env.DATABASE_PATH = ":memory:";
 let app: ReturnType<typeof createApp>;
 
 // テスト用のHTTPリクエストヘルパー
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function request(
   method: string,
   path: string,
-  body?: Record<string, unknown>
-) {
+  body?: unknown
+): Promise<Response & { json: () => Promise<any> }> {
   const init: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },

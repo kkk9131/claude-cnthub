@@ -20,6 +20,7 @@ import {
   listSummaries,
 } from "../repositories/summary";
 import { generateSummary } from "../services/summarizer";
+import { ListSummariesSchema } from "../schemas";
 
 const memory = new Hono();
 
@@ -41,7 +42,7 @@ memory.post("/sessions/:id/summarize", async (c) => {
   }
 
   // セッションのメッセージを取得
-  const messages = getSessionMessages(sessionId);
+  const { items: messages } = getSessionMessages(sessionId);
 
   // AI要約を生成
   const generatedSummary = await generateSummary(sessionId, messages);
@@ -103,10 +104,16 @@ memory.get("/sessions/:id/summary", async (c) => {
  * 全要約一覧（ページネーション対応）
  */
 memory.get("/summaries", async (c) => {
-  const page = parseInt(c.req.query("page") || "1", 10);
-  const limit = parseInt(c.req.query("limit") || "20", 10);
+  // Zodでクエリパラメータをバリデーション
+  const queryParams = ListSummariesSchema.parse({
+    page: c.req.query("page"),
+    limit: c.req.query("limit"),
+  });
 
-  const result = listSummaries({ page, limit });
+  const result = listSummaries({
+    page: queryParams.page,
+    limit: queryParams.limit,
+  });
 
   return c.json(result, 200);
 });

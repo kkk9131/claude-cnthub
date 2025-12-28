@@ -27,13 +27,7 @@ export function getDatabase(): Database {
 /**
  * SQLクエリのバインディング型
  */
-export type SQLQueryBindings =
-  | string
-  | number
-  | boolean
-  | null
-  | Uint8Array
-  | undefined;
+export type SQLQueryBindings = string | number | boolean | null | Uint8Array;
 
 /**
  * SELECT クエリを実行（複数行）
@@ -88,4 +82,22 @@ export function closeDatabase(): void {
 export function resetDatabase(): void {
   closeDatabase();
   db = new Database(":memory:");
+}
+
+// マイグレーション関連
+import { migrate } from "./migrations";
+import { migration as migration001 } from "./migrations/001_initial_schema";
+import { migration as migration002 } from "./migrations/002_create_sessions_messages";
+import { migration as migration003 } from "./migrations/003_create_summaries";
+
+// 全マイグレーションリスト
+const allMigrations = [migration001, migration002, migration003];
+
+/**
+ * 全マイグレーションを実行
+ */
+export function runMigrations(): void {
+  console.log("Running database migrations...");
+  migrate(allMigrations);
+  console.log("Migrations completed.");
 }

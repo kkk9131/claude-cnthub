@@ -37,6 +37,7 @@ export const createMessageFixture = (
   sessionId: "sess_test123",
   type: "user",
   content: "Test message content",
+  compressed: false,
   timestamp: new Date("2024-01-01T00:00:00Z"),
   ...overrides,
 });
@@ -77,6 +78,8 @@ export const createWorkItemFixture = (
   workItemId: "wi_test123",
   name: "Test Work Item",
   status: "planning",
+  tags: [],
+  priority: 0,
   createdAt: new Date("2024-01-01T00:00:00Z"),
   updatedAt: new Date("2024-01-01T00:00:00Z"),
   ...overrides,

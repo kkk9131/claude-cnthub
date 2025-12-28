@@ -141,7 +141,7 @@ function handleJoin(ws: ServerWebSocket<WSClientData>, sessionId: string) {
   addToSession(ws, sessionId);
 
   // 既存メッセージを取得して送信
-  const messages = getSessionMessages(sessionId);
+  const { items: messages } = getSessionMessages(sessionId);
   const response: ServerMessage = { type: "joined", sessionId, messages };
   ws.send(JSON.stringify(response));
 

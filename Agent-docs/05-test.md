@@ -7,6 +7,76 @@
 | **テストフレームワーク** | Vitest（Bun 互換） |
 | **E2E テスト**           | Playwright         |
 | **カバレッジ目標**       | 80% 以上           |
+| **開発手法**             | TDD 必須           |
+
+---
+
+## TDD ワークフロー（必須）
+
+全ての実装は以下の手順で行う。`/work` コマンド使用時も同様。
+
+### Red-Green-Refactor サイクル
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  1. Red: テストを先に書く（失敗する状態）               │
+│     ↓                                                   │
+│  2. テスト実行: bun test --run（失敗を確認）            │
+│     ↓                                                   │
+│  3. Green: 最小限の実装（テストが通るまで）             │
+│     ↓                                                   │
+│  4. テスト実行: bun test --run（成功を確認）            │
+│     ↓                                                   │
+│  5. Refactor: コード整理（テスト維持しながら）          │
+│     ↓                                                   │
+│  次の機能へ → 1. に戻る                                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 実装例
+
+```typescript
+// Step 1: Red - まずテストを書く
+describe("createSession", () => {
+  it("should create session with generated ID", () => {
+    const session = createSession({ name: "Test", workingDir: "/tmp" });
+    expect(session.sessionId).toMatch(/^sess-/);
+    expect(session.status).toBe("idle");
+  });
+
+  it("should reject empty name", () => {
+    expect(() => createSession({ name: "", workingDir: "/tmp" }))
+      .toThrow("Name is required");
+  });
+});
+
+// Step 2: bun test --run → 失敗（createSession 未実装）
+
+// Step 3: Green - 最小限の実装
+export function createSession(data: CreateSessionData): Session {
+  if (!data.name) throw new Error("Name is required");
+  return {
+    sessionId: `sess-${crypto.randomUUID()}`,
+    name: data.name,
+    workingDir: data.workingDir,
+    status: "idle",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
+// Step 4: bun test --run → 成功
+// Step 5: Refactor（必要に応じて）
+```
+
+### 禁止事項
+
+| 禁止                                     | 理由                         |
+| ---------------------------------------- | ---------------------------- |
+| `expect(true).toBe(true)`                | 何も検証していない           |
+| テストを通すためだけのハードコード       | 本番で動かない               |
+| 実装を先に書いてからテストを書く         | TDD ではない                 |
+| テストなしで PR を出す                   | 品質担保できない             |
 
 ---
 

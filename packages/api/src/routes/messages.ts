@@ -158,11 +158,11 @@ messagesRouter.get(
     const sessionId = c.get("sessionId");
     const { type, page, limit } = c.req.valid("query");
 
-    const result = listMessages(
-      sessionId,
-      { type },
-      { page: page ?? 1, limit: limit ?? 50 }
-    );
+    const result = listMessages(sessionId, {
+      type,
+      page: page ?? 1,
+      limit: limit ?? 50,
+    });
 
     return c.json(result);
   }
