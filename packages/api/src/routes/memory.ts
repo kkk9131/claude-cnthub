@@ -118,4 +118,4 @@ memory.get("/summaries", async (c) => {
   return c.json(result, 200);
 });
 
-export { memory };
+export { memory as memoryRouter };

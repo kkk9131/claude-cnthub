@@ -7,6 +7,9 @@ export default defineConfig({
     environment: "node",
     include: ["packages/**/*.{test,spec}.{ts,tsx}"],
     exclude: ["**/node_modules/**", "**/dist/**"],
+    // インメモリDBの競合を防ぐため、テストファイルを順次実行
+    fileParallelism: false,
+    testTimeout: 10000,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

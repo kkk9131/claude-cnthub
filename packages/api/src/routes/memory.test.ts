@@ -24,20 +24,20 @@ import {
   createMessageFixture,
 } from "../test-utils";
 
-// モック: Anthropic SDK
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: vi.fn().mockImplementation(() => ({
-    messages: {
-      create: vi.fn().mockResolvedValue({
+// モック: Claude Agent SDK
+vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
+  query: vi.fn(async function* () {
+    yield {
+      type: "assistant",
+      message: {
         content: [
           {
-            type: "text",
             text: "SHORT_SUMMARY: テストセッションの要約です。\nDETAILED_SUMMARY: ユーザーがテスト機能を実装。Vitestを使用したテスト環境を構築しました。\nKEY_DECISIONS:\n- Vitestを採用\n- TDDで進める",
           },
         ],
-      }),
-    },
-  })),
+      },
+    };
+  }),
 }));
 
 // テスト用: インメモリDBを使用

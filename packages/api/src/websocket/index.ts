@@ -24,6 +24,79 @@ import type { Message, MessageType } from "@claude-cnthub/shared";
 import { createMessage, getSessionMessages } from "../repositories/message";
 import { getSession } from "../repositories/session";
 
+// ==================== セキュリティ設定 ====================
+
+/** 許可するOrigin（環境変数から取得、カンマ区切り） */
+const ALLOWED_ORIGINS = (
+  process.env.WS_ALLOWED_ORIGINS ||
+  "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
+).split(",");
+
+/** WebSocketクローズコード */
+const WS_CLOSE_CODES = {
+  NORMAL: 1000,
+  POLICY_VIOLATION: 1008,
+} as const;
+
+/** セキュリティ制限 */
+const LIMITS = {
+  MAX_PAYLOAD_SIZE: 1024 * 1024, // 1MB
+  MAX_MESSAGE_LENGTH: 100000, // 100KB
+  MAX_SESSION_ID_LENGTH: 100,
+  RATE_LIMIT_WINDOW_MS: 60000, // 1分
+  MAX_MESSAGES_PER_WINDOW: 100,
+} as const;
+
+// ==================== バリデーション ====================
+
+/** セッションID形式の検証（sess-プレフィックス付きUUID） */
+function validateSessionId(sessionId: unknown): sessionId is string {
+  if (typeof sessionId !== "string") return false;
+  if (sessionId.length === 0 || sessionId.length > LIMITS.MAX_SESSION_ID_LENGTH)
+    return false;
+  // sess-{uuid} または {uuid} 形式を許可
+  return /^(sess-)?[a-f0-9-]{36}$/i.test(sessionId);
+}
+
+/** メッセージ内容の検証 */
+function validateContent(content: unknown): content is string {
+  if (typeof content !== "string") return false;
+  if (content.length === 0) return false;
+  if (content.length > LIMITS.MAX_MESSAGE_LENGTH) return false;
+  return true;
+}
+
+// ==================== レート制限 ====================
+
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+const rateLimits = new Map<string, RateLimitEntry>();
+
+function checkRateLimit(clientId: string): boolean {
+  const now = Date.now();
+  const entry = rateLimits.get(clientId);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimits.set(clientId, {
+      count: 1,
+      resetAt: now + LIMITS.RATE_LIMIT_WINDOW_MS,
+    });
+    return true;
+  }
+
+  if (entry.count >= LIMITS.MAX_MESSAGES_PER_WINDOW) {
+    return false;
+  }
+
+  entry.count++;
+  return true;
+}
+
+// ==================== 型定義 ====================
+
 /**
  * WebSocket クライアントデータ
  *
@@ -80,6 +153,23 @@ export const websocketHandler = {
    * メッセージ受信時
    */
   message(ws: ServerWebSocket<WSClientData>, message: string | Buffer) {
+    // ペイロードサイズチェック
+    const messageSize =
+      typeof message === "string" ? message.length : message.length;
+    if (messageSize > LIMITS.MAX_PAYLOAD_SIZE) {
+      console.warn(
+        `[WebSocket] Rejected oversized message: ${messageSize} bytes`
+      );
+      sendError(ws, "Message too large");
+      return;
+    }
+
+    // レート制限チェック
+    if (!checkRateLimit(ws.data.clientId)) {
+      sendError(ws, "Rate limit exceeded");
+      return;
+    }
+
     try {
       const data = JSON.parse(
         typeof message === "string" ? message : message.toString()
@@ -124,28 +214,41 @@ export const websocketHandler = {
  * セッション参加ハンドラー
  */
 function handleJoin(ws: ServerWebSocket<WSClientData>, sessionId: string) {
-  // セッション存在確認
-  const session = getSession(sessionId);
-  if (!session) {
-    sendError(ws, `Session not found: ${sessionId}`);
+  // 入力バリデーション
+  if (!validateSessionId(sessionId)) {
+    sendError(ws, "Invalid session ID format");
     return;
   }
 
-  // 前のセッションから離脱
-  if (ws.data.sessionId && ws.data.sessionId !== sessionId) {
-    removeFromSession(ws, ws.data.sessionId);
+  try {
+    // セッション存在確認
+    const session = getSession(sessionId);
+    if (!session) {
+      // セキュリティ: セッションの存在を明示しない
+      sendError(ws, "Unable to join session");
+      console.warn(`[WebSocket] Session not found: ${sessionId}`);
+      return;
+    }
+
+    // 前のセッションから離脱
+    if (ws.data.sessionId && ws.data.sessionId !== sessionId) {
+      removeFromSession(ws, ws.data.sessionId);
+    }
+
+    // セッションに追加
+    ws.data.sessionId = sessionId;
+    addToSession(ws, sessionId);
+
+    // 既存メッセージを取得して送信
+    const { items: messages } = getSessionMessages(sessionId);
+    const response: ServerMessage = { type: "joined", sessionId, messages };
+    ws.send(JSON.stringify(response));
+
+    console.log(`[WebSocket] ${ws.data.clientId} joined session ${sessionId}`);
+  } catch (error) {
+    console.error("[WebSocket] Error in handleJoin:", error);
+    sendError(ws, "Internal server error");
   }
-
-  // セッションに追加
-  ws.data.sessionId = sessionId;
-  addToSession(ws, sessionId);
-
-  // 既存メッセージを取得して送信
-  const { items: messages } = getSessionMessages(sessionId);
-  const response: ServerMessage = { type: "joined", sessionId, messages };
-  ws.send(JSON.stringify(response));
-
-  console.log(`[WebSocket] ${ws.data.clientId} joined session ${sessionId}`);
 }
 
 /**
@@ -169,26 +272,43 @@ function handleMessage(
   sessionId: string,
   content: string
 ) {
-  // セッション存在確認
-  const session = getSession(sessionId);
-  if (!session) {
-    sendError(ws, `Session not found: ${sessionId}`);
+  // 入力バリデーション
+  if (!validateSessionId(sessionId)) {
+    sendError(ws, "Invalid session ID format");
     return;
   }
 
-  // メッセージを保存
-  const message = createMessage({
-    sessionId,
-    type: "user",
-    content,
-  });
+  if (!validateContent(content)) {
+    sendError(ws, "Invalid message content (empty or too long)");
+    return;
+  }
 
-  // セッション内の全クライアントに送信
-  broadcastToSession(sessionId, { type: "new-message", message });
+  try {
+    // セッション存在確認
+    const session = getSession(sessionId);
+    if (!session) {
+      sendError(ws, "Unable to send message");
+      console.warn(`[WebSocket] Session not found: ${sessionId}`);
+      return;
+    }
 
-  console.log(
-    `[WebSocket] Message sent to ${sessionId}: ${content.slice(0, 50)}...`
-  );
+    // メッセージを保存
+    const message = createMessage({
+      sessionId,
+      type: "user",
+      content,
+    });
+
+    // セッション内の全クライアントに送信
+    broadcastToSession(sessionId, { type: "new-message", message });
+
+    console.log(
+      `[WebSocket] Message sent to ${sessionId}: ${content.slice(0, 50)}...`
+    );
+  } catch (error) {
+    console.error("[WebSocket] Error in handleMessage:", error);
+    sendError(ws, "Failed to send message");
+  }
 }
 
 /**
