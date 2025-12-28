@@ -1,0 +1,91 @@
+/**
+ * データベース接続とクエリユーティリティ
+ *
+ * SQLiteデータベースへの接続と基本的なクエリ操作を提供
+ */
+
+import { Database } from "bun:sqlite";
+
+// データベースパス（環境変数またはデフォルト）
+const DB_PATH = process.env.DATABASE_PATH || ":memory:";
+
+// データベース接続（遅延初期化）
+let db: Database | null = null;
+
+/**
+ * データベース接続を取得
+ */
+export function getDatabase(): Database {
+  if (!db) {
+    db = new Database(DB_PATH);
+    // WALモードを有効化（パフォーマンス向上）
+    db.run("PRAGMA journal_mode = WAL");
+  }
+  return db;
+}
+
+/**
+ * SQLクエリのバインディング型
+ */
+export type SQLQueryBindings =
+  | string
+  | number
+  | boolean
+  | null
+  | Uint8Array
+  | undefined;
+
+/**
+ * SELECT クエリを実行（複数行）
+ */
+export function query<T>(sql: string, ...params: SQLQueryBindings[]): T[] {
+  const database = getDatabase();
+  const stmt = database.prepare(sql);
+  return stmt.all(...params) as T[];
+}
+
+/**
+ * SELECT クエリを実行（単一行）
+ */
+export function queryOne<T>(
+  sql: string,
+  ...params: SQLQueryBindings[]
+): T | null {
+  const database = getDatabase();
+  const stmt = database.prepare(sql);
+  return (stmt.get(...params) as T) ?? null;
+}
+
+/**
+ * INSERT / UPDATE / DELETE を実行
+ */
+export function execute(
+  sql: string,
+  ...params: SQLQueryBindings[]
+): { changes: number; lastInsertRowid: number } {
+  const database = getDatabase();
+  const stmt = database.prepare(sql);
+  const result = stmt.run(...params);
+  return {
+    changes: result.changes,
+    lastInsertRowid: Number(result.lastInsertRowid),
+  };
+}
+
+/**
+ * データベース接続をクローズ
+ */
+export function closeDatabase(): void {
+  if (db) {
+    db.close();
+    db = null;
+  }
+}
+
+/**
+ * テスト用: データベースをリセット
+ */
+export function resetDatabase(): void {
+  closeDatabase();
+  db = new Database(":memory:");
+}

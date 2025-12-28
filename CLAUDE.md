@@ -39,6 +39,7 @@ bun run lint          # リント
 
 | ドキュメント                                        | 内容                         |
 | --------------------------------------------------- | ---------------------------- |
+| [00-references.md](Agent-docs/00-references.md)     | 参考プロジェクト・URL        |
 | [01-requirements.md](Agent-docs/01-requirements.md) | 要件定義・機能一覧・制約事項 |
 | [02-tech-stack.md](Agent-docs/02-tech-stack.md)     | 技術選定・ディレクトリ構成   |
 | [03-database.md](Agent-docs/03-database.md)         | ER図・テーブル定義・クエリ例 |
