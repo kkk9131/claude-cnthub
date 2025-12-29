@@ -28,27 +28,27 @@
 
 ---
 
-## フェーズ2: コア機能 `cc:TODO`
+## フェーズ2: コア機能 `cc:完了`
 
-### 2.1 セッション管理 API
+### 2.1 セッション管理 API `cc:完了`
 
-- [ ] POST /api/sessions - セッション作成
-- [ ] GET /api/sessions - 一覧取得
-- [ ] GET /api/sessions/:id - 詳細取得
-- [ ] PATCH /api/sessions/:id - 更新
-- [ ] DELETE /api/sessions/:id - 削除
+- [x] POST /api/sessions - セッション作成 `cc:完了`
+- [x] GET /api/sessions - 一覧取得 `cc:完了`
+- [x] GET /api/sessions/:id - 詳細取得 `cc:完了`
+- [x] PATCH /api/sessions/:id - 更新 `cc:完了`
+- [x] DELETE /api/sessions/:id - 削除 `cc:完了`
 
-### 2.2 メッセージ管理
+### 2.2 メッセージ管理 `cc:完了`
 
-- [ ] POST /api/sessions/:id/messages - メッセージ送信
-- [ ] GET /api/sessions/:id/messages - メッセージ一覧
-- [ ] WebSocket リアルタイム通信
+- [x] POST /api/sessions/:id/messages - メッセージ送信 `cc:完了`
+- [x] GET /api/sessions/:id/messages - メッセージ一覧 `cc:完了`
+- [x] WebSocket リアルタイム通信 `cc:完了`
 
-### 2.3 AI 要約機能
+### 2.3 AI 要約機能 `cc:完了`
 
-- [ ] Claude Agent SDK 統合
-- [ ] セッション要約生成
-- [ ] メタデータ抽出 (決定事項、変更ファイル)
+- [x] Claude Agent SDK 統合 `cc:完了`
+- [x] セッション要約生成 `cc:完了`
+- [x] メタデータ抽出 (決定事項、変更ファイル) `cc:完了`
 
 ---
 

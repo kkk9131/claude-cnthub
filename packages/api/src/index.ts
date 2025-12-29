@@ -5,13 +5,13 @@
  * Hono + Bun による REST/WebSocket API サーバー
  */
 
+import type { Server } from "bun";
 import { app } from "./app";
+import { config } from "./config";
 import { runMigrations } from "./db";
 import { websocketHandler, type WSClientData } from "./websocket";
 
 // ==================== サーバー起動 ====================
-
-const PORT = process.env.API_PORT || 3001;
 
 // マイグレーション実行
 try {
@@ -28,13 +28,42 @@ console.log(`
 ║       claude-cnthub API Server            ║
 ╠═══════════════════════════════════════════╣
 ║  Status:    Running                       ║
-║  Port:      ${String(PORT).padEnd(27)}║
-║  Health:    http://localhost:${PORT}/health  ║
+║  Port:      ${String(config.api.port).padEnd(27)}║
+║  Health:    http://localhost:${config.api.port}/health  ║
 ╚═══════════════════════════════════════════╝
 `);
 
 export default {
-  port: Number(PORT),
-  fetch: app.fetch,
+  port: config.api.port,
+  fetch(req: Request, server: Server): Response | Promise<Response> {
+    const url = new URL(req.url);
+
+    // WebSocketアップグレードリクエストの処理
+    if (url.pathname === "/ws") {
+      // Origin検証
+      const origin = req.headers.get("origin");
+      if (origin && !config.websocket.allowedOrigins.includes(origin)) {
+        console.warn(
+          `[WebSocket] Rejected connection from unauthorized origin: ${origin}`
+        );
+        return new Response("Forbidden: Invalid origin", { status: 403 });
+      }
+
+      // WebSocketにアップグレード
+      const upgraded = server.upgrade<WSClientData>(req, {
+        data: { clientId: "" }, // open()で設定される
+      });
+
+      if (upgraded) {
+        // アップグレード成功（Bunは自動的に101を返す）
+        return undefined as unknown as Response;
+      }
+
+      return new Response("WebSocket upgrade failed", { status: 500 });
+    }
+
+    // 通常のHTTPリクエストはHonoで処理
+    return app.fetch(req, server);
+  },
   websocket: websocketHandler,
 };

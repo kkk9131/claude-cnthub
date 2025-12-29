@@ -119,7 +119,7 @@ messagesRouter.post(
       );
     }
   }),
-  (c) => {
+  async (c) => {
     const sessionId = c.get("sessionId");
     const data = c.req.valid("json");
 
@@ -154,7 +154,7 @@ messagesRouter.get(
       );
     }
   }),
-  (c) => {
+  async (c) => {
     const sessionId = c.get("sessionId");
     const { type, page, limit } = c.req.valid("query");
 
@@ -174,7 +174,7 @@ messagesRouter.get(
  * 指定されたメッセージを削除。
  * 存在しない場合は404を返す。
  */
-messagesRouter.delete("/:messageId", (c) => {
+messagesRouter.delete("/:messageId", async (c) => {
   const messageId = c.req.param("messageId");
   const deleted = deleteMessage(messageId);
 

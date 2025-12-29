@@ -23,14 +23,9 @@ import type { ServerWebSocket } from "bun";
 import type { Message, MessageType } from "@claude-cnthub/shared";
 import { createMessage, getSessionMessages } from "../repositories/message";
 import { getSession } from "../repositories/session";
+import { config } from "../config";
 
 // ==================== セキュリティ設定 ====================
-
-/** 許可するOrigin（環境変数から取得、カンマ区切り） */
-const ALLOWED_ORIGINS = (
-  process.env.WS_ALLOWED_ORIGINS ||
-  "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000"
-).split(",");
 
 /** WebSocketクローズコード */
 const WS_CLOSE_CODES = {
@@ -38,13 +33,13 @@ const WS_CLOSE_CODES = {
   POLICY_VIOLATION: 1008,
 } as const;
 
-/** セキュリティ制限 */
+/** セキュリティ制限（config.tsから取得） */
 const LIMITS = {
-  MAX_PAYLOAD_SIZE: 1024 * 1024, // 1MB
-  MAX_MESSAGE_LENGTH: 100000, // 100KB
+  MAX_PAYLOAD_SIZE: config.websocket.maxPayloadSize,
+  MAX_MESSAGE_LENGTH: config.websocket.maxMessageLength,
   MAX_SESSION_ID_LENGTH: 100,
-  RATE_LIMIT_WINDOW_MS: 60000, // 1分
-  MAX_MESSAGES_PER_WINDOW: 100,
+  RATE_LIMIT_WINDOW_MS: config.websocket.rateLimitWindowMs,
+  MAX_MESSAGES_PER_WINDOW: config.websocket.maxMessagesPerWindow,
 } as const;
 
 // ==================== バリデーション ====================

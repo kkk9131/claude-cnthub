@@ -45,7 +45,7 @@ sessionsRouter.post(
       );
     }
   }),
-  (c) => {
+  async (c) => {
     const data = c.req.valid("json");
 
     const session = createSession({
@@ -78,7 +78,7 @@ sessionsRouter.get(
       );
     }
   }),
-  (c) => {
+  async (c) => {
     const query = c.req.valid("query");
 
     const result = listSessions({
@@ -97,7 +97,7 @@ sessionsRouter.get(
 /**
  * GET /sessions/:id - セッション詳細
  */
-sessionsRouter.get("/:id", (c) => {
+sessionsRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
   const session = getSessionById(id);
 
@@ -124,7 +124,7 @@ sessionsRouter.patch(
       );
     }
   }),
-  (c) => {
+  async (c) => {
     const id = c.req.param("id");
     const data = c.req.valid("json");
 
@@ -142,7 +142,7 @@ sessionsRouter.patch(
 /**
  * DELETE /sessions/:id - セッション削除（論理削除）
  */
-sessionsRouter.delete("/:id", (c) => {
+sessionsRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const deleted = deleteSession(id);
 
