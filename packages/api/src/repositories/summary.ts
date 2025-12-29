@@ -146,6 +146,35 @@ export function getSummaryBySessionId(
 }
 
 /**
+ * 複数のセッションIDで要約をバッチ取得
+ *
+ * N+1問題を回避するためのバッチ取得関数
+ *
+ * @param sessionIds - セッションIDの配列
+ * @returns セッションIDをキーとした要約のMap
+ */
+export function getSummariesBySessionIds(
+  sessionIds: string[]
+): Map<string, SessionSummary> {
+  if (sessionIds.length === 0) {
+    return new Map();
+  }
+
+  const placeholders = sessionIds.map(() => "?").join(", ");
+  const rows = query<SummaryRow>(
+    `SELECT * FROM summaries WHERE session_id IN (${placeholders})`,
+    ...sessionIds
+  );
+
+  const summaryMap = new Map<string, SessionSummary>();
+  for (const row of rows) {
+    summaryMap.set(row.session_id, rowToSummary(row));
+  }
+
+  return summaryMap;
+}
+
+/**
  * 要約IDで取得
  */
 export function getSummary(summaryId: string): SessionSummary | null {

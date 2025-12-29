@@ -23,6 +23,16 @@ import {
   buildRelatedContext,
   isContextInjectionAvailable,
 } from "../services/context";
+import { distanceToRelevanceScore } from "../utils/relevance";
+import { rateLimit } from "../middleware/rateLimit";
+
+/** 検索API用レート制限（1分あたり20リクエスト） */
+const searchRateLimit = rateLimit({
+  windowMs: 60000,
+  maxRequests: 20,
+  message:
+    "Search rate limit exceeded. Please wait before making more requests.",
+});
 
 /**
  * 検索リクエストスキーマ
@@ -65,53 +75,59 @@ const app = new Hono();
  *
  * クエリテキストに関連するセッションを検索
  */
-app.post("/", zValidator("json", searchRequestSchema), async (c) => {
-  const { query: queryText, limit } = c.req.valid("json");
+app.post(
+  "/",
+  searchRateLimit,
+  zValidator("json", searchRequestSchema),
+  async (c) => {
+    const { query: queryText, limit } = c.req.valid("json");
 
-  // Embedding 機能が利用可能かチェック
-  if (!isEmbeddingAvailable()) {
-    return c.json(
-      {
-        error: "Semantic search is not available",
-        message: "VOYAGE_API_KEY is not configured",
-      },
-      503
+    // Embedding 機能が利用可能かチェック
+    if (!isEmbeddingAvailable()) {
+      return c.json(
+        {
+          error: "Semantic search is not available",
+          message: "VOYAGE_API_KEY is not configured",
+        },
+        503
+      );
+    }
+
+    // クエリの Embedding を生成
+    const embeddingResult = await generateQueryEmbedding(queryText);
+    if (!embeddingResult) {
+      return c.json(
+        {
+          error: "Failed to process query",
+          message: "Could not generate embedding for the query",
+        },
+        500
+      );
+    }
+
+    // セマンティック検索を実行
+    const searchResults = searchSimilarSessions(
+      embeddingResult.embedding,
+      limit
     );
+
+    // 距離をスコアに変換
+    const results = searchResults.map((result) => ({
+      sessionId: result.sessionId,
+      sessionName: result.sessionName,
+      shortSummary: result.shortSummary,
+      relevanceScore: distanceToRelevanceScore(result.distance),
+    }));
+
+    const response: SearchResponse = {
+      results,
+      totalResults: results.length,
+      queryTokens: embeddingResult.totalTokens,
+    };
+
+    return c.json(response);
   }
-
-  // クエリの Embedding を生成
-  const embeddingResult = await generateQueryEmbedding(queryText);
-  if (!embeddingResult) {
-    return c.json(
-      {
-        error: "Failed to process query",
-        message: "Could not generate embedding for the query",
-      },
-      500
-    );
-  }
-
-  // セマンティック検索を実行
-  const searchResults = searchSimilarSessions(embeddingResult.embedding, limit);
-
-  // 距離をスコアに変換（cosine distance を similarity に変換）
-  // cosine distance: 0 = 完全一致, 2 = 完全に反対
-  // similarity: 1 = 完全一致, 0 = 無関係
-  const results = searchResults.map((result) => ({
-    sessionId: result.sessionId,
-    sessionName: result.sessionName,
-    shortSummary: result.shortSummary,
-    relevanceScore: Math.max(0, 1 - result.distance / 2),
-  }));
-
-  const response: SearchResponse = {
-    results,
-    totalResults: results.length,
-    queryTokens: embeddingResult.totalTokens,
-  };
-
-  return c.json(response);
-});
+);
 
 /**
  * GET /api/search/status - 検索機能のステータス
@@ -151,42 +167,47 @@ const contextRequestSchema = z.object({
  * クエリに関連する過去のセッション情報を
  * 新しいセッションに注入するためのコンテキストとして構築
  */
-app.post("/context", zValidator("json", contextRequestSchema), async (c) => {
-  const {
-    query: queryText,
-    maxSessions,
-    maxTokens,
-    minRelevanceScore,
-  } = c.req.valid("json");
+app.post(
+  "/context",
+  searchRateLimit,
+  zValidator("json", contextRequestSchema),
+  async (c) => {
+    const {
+      query: queryText,
+      maxSessions,
+      maxTokens,
+      minRelevanceScore,
+    } = c.req.valid("json");
 
-  // コンテキスト注入が利用可能かチェック
-  if (!isContextInjectionAvailable()) {
-    return c.json(
-      {
-        error: "Context injection is not available",
-        message: "VOYAGE_API_KEY is not configured",
-      },
-      503
-    );
+    // コンテキスト注入が利用可能かチェック
+    if (!isContextInjectionAvailable()) {
+      return c.json(
+        {
+          error: "Context injection is not available",
+          message: "VOYAGE_API_KEY is not configured",
+        },
+        503
+      );
+    }
+
+    // コンテキストを構築
+    const context = await buildRelatedContext(queryText, {
+      maxSessions,
+      maxTokens,
+      minRelevanceScore,
+    });
+
+    return c.json({
+      contextText: context.contextText,
+      estimatedTokens: context.estimatedTokens,
+      sessionsUsed: context.sessions.length,
+      sessions: context.sessions.map((s) => ({
+        sessionId: s.sessionId,
+        sessionName: s.sessionName,
+        relevanceScore: s.relevanceScore,
+      })),
+    });
   }
-
-  // コンテキストを構築
-  const context = await buildRelatedContext(queryText, {
-    maxSessions,
-    maxTokens,
-    minRelevanceScore,
-  });
-
-  return c.json({
-    contextText: context.contextText,
-    estimatedTokens: context.estimatedTokens,
-    sessionsUsed: context.sessions.length,
-    sessions: context.sessions.map((s) => ({
-      sessionId: s.sessionId,
-      sessionName: s.sessionName,
-      relevanceScore: s.relevanceScore,
-    })),
-  });
-});
+);
 
 export default app;

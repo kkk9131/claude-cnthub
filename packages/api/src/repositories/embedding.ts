@@ -152,6 +152,8 @@ export function deleteEmbeddingBySource(
 
 /**
  * セッションIDで全ての Embedding を削除
+ *
+ * バッチ削除で効率化
  */
 export function deleteEmbeddingsBySessionId(sessionId: string): number {
   const rows = query<{ embedding_id: number }>(
@@ -159,9 +161,17 @@ export function deleteEmbeddingsBySessionId(sessionId: string): number {
     sessionId
   );
 
-  for (const row of rows) {
-    execute("DELETE FROM vec_embeddings WHERE rowid = ?", row.embedding_id);
+  if (rows.length === 0) {
+    return 0;
   }
+
+  // バッチ削除で効率化
+  const embeddingIds = rows.map((row) => row.embedding_id);
+  const placeholders = embeddingIds.map(() => "?").join(", ");
+  execute(
+    `DELETE FROM vec_embeddings WHERE rowid IN (${placeholders})`,
+    ...embeddingIds
+  );
 
   const result = execute(
     "DELETE FROM embedding_index WHERE session_id = ?",

@@ -20,18 +20,18 @@ vi.mock("../repositories/embedding", () => ({
 }));
 
 vi.mock("../repositories/summary", () => ({
-  getSummaryBySessionId: vi.fn(),
+  getSummariesBySessionIds: vi.fn(),
 }));
 
 import { isEmbeddingAvailable, generateQueryEmbedding } from "./embeddings";
 import { searchSimilarSessions } from "../repositories/embedding";
-import { getSummaryBySessionId } from "../repositories/summary";
+import { getSummariesBySessionIds } from "../repositories/summary";
 
 // 型アサーション用のヘルパー
 const mockIsEmbeddingAvailable = isEmbeddingAvailable as Mock;
 const mockGenerateQueryEmbedding = generateQueryEmbedding as Mock;
 const mockSearchSimilarSessions = searchSimilarSessions as Mock;
-const mockGetSummaryBySessionId = getSummaryBySessionId as Mock;
+const mockGetSummariesBySessionIds = getSummariesBySessionIds as Mock;
 
 describe("Context Service", () => {
   beforeEach(() => {
@@ -95,7 +95,7 @@ describe("Context Service", () => {
           distance: 0.4,
         },
       ]);
-      mockGetSummaryBySessionId.mockReturnValue(null);
+      mockGetSummariesBySessionIds.mockReturnValue(new Map());
 
       const result = await findRelatedSessions("test query", {
         minRelevanceScore: 0.3,
@@ -132,7 +132,7 @@ describe("Context Service", () => {
           distance: 0.3,
         },
       ]);
-      mockGetSummaryBySessionId.mockReturnValue(null);
+      mockGetSummariesBySessionIds.mockReturnValue(new Map());
 
       const result = await findRelatedSessions("test query", {
         maxSessions: 2,
@@ -169,7 +169,8 @@ describe("Context Service", () => {
           distance: 0.1,
         },
       ]);
-      mockGetSummaryBySessionId.mockReturnValue({
+      const summaryMap = new Map();
+      summaryMap.set("s1", {
         summaryId: "sum1",
         sessionId: "s1",
         shortSummary: "JWT認証を実装",
@@ -184,6 +185,7 @@ describe("Context Service", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
+      mockGetSummariesBySessionIds.mockReturnValue(summaryMap);
 
       const result = await buildRelatedContext("認証機能", {
         minRelevanceScore: 0,

@@ -15,8 +15,29 @@ import {
   searchSimilarSessions,
   type SessionSearchResult,
 } from "../repositories/embedding";
-import { getSummaryBySessionId } from "../repositories/summary";
+import { getSummariesBySessionIds } from "../repositories/summary";
 import type { SessionSummary } from "@claude-cnthub/shared";
+import { distanceToRelevanceScore } from "../utils/relevance";
+
+/**
+ * コンテキスト構築の定数
+ */
+/** デフォルトの最大セッション数 */
+const DEFAULT_MAX_SESSIONS = 5;
+/** デフォルトの最大トークン数 */
+const DEFAULT_MAX_TOKENS = 4000;
+/** デフォルトの最小関連度スコア */
+const DEFAULT_MIN_RELEVANCE_SCORE = 0.3;
+/** 表示する決定事項の最大数 */
+const MAX_DECISIONS_DISPLAY = 3;
+/** 表示する変更ファイルの最大数 */
+const MAX_FILES_DISPLAY = 5;
+/** 検索時のフィルタリング倍率 */
+const SEARCH_MULTIPLIER = 2;
+/** 日本語1トークンあたりの文字数 */
+const JAPANESE_CHARS_PER_TOKEN = 1.5;
+/** 英語1トークンあたりの文字数 */
+const ENGLISH_CHARS_PER_TOKEN = 4;
 
 /**
  * コンテキスト構築オプション
@@ -68,7 +89,10 @@ export async function findRelatedSessions(
   queryText: string,
   options: ContextOptions = {}
 ): Promise<RelatedSession[]> {
-  const { maxSessions = 5, minRelevanceScore = 0.3 } = options;
+  const {
+    maxSessions = DEFAULT_MAX_SESSIONS,
+    minRelevanceScore = DEFAULT_MIN_RELEVANCE_SCORE,
+  } = options;
 
   // Embedding 機能が利用不可の場合は空配列を返す
   if (!isEmbeddingAvailable()) {
@@ -81,36 +105,41 @@ export async function findRelatedSessions(
     return [];
   }
 
-  // セマンティック検索を実行
+  // セマンティック検索を実行（フィルタリング用に多めに取得）
   const searchResults = searchSimilarSessions(
     embeddingResult.embedding,
-    maxSessions * 2 // フィルタリング用に多めに取得
+    maxSessions * SEARCH_MULTIPLIER
   );
 
   // 距離をスコアに変換してフィルタ
-  const relatedSessions: RelatedSession[] = [];
+  const filteredResults = searchResults
+    .map((result) => ({
+      ...result,
+      relevanceScore: distanceToRelevanceScore(result.distance),
+    }))
+    .filter((result) => result.relevanceScore >= minRelevanceScore)
+    .slice(0, maxSessions);
 
-  for (const result of searchResults) {
-    const relevanceScore = Math.max(0, 1 - result.distance / 2);
-    if (relevanceScore < minRelevanceScore) continue;
+  if (filteredResults.length === 0) {
+    return [];
+  }
 
-    // 詳細情報を取得
-    const summary = getSummaryBySessionId(result.sessionId);
+  // バッチ取得でN+1問題を回避
+  const sessionIds = filteredResults.map((r) => r.sessionId);
+  const summaryMap = getSummariesBySessionIds(sessionIds);
 
-    relatedSessions.push({
+  return filteredResults.map((result) => {
+    const summary = summaryMap.get(result.sessionId);
+    return {
       sessionId: result.sessionId,
       sessionName: result.sessionName,
       shortSummary: result.shortSummary,
       detailedSummary: summary?.detailedSummary,
       keyDecisions: summary?.keyDecisions,
       filesModified: summary?.filesModified,
-      relevanceScore,
-    });
-
-    if (relatedSessions.length >= maxSessions) break;
-  }
-
-  return relatedSessions;
+      relevanceScore: result.relevanceScore,
+    };
+  });
 }
 
 /**
@@ -124,7 +153,7 @@ export async function buildRelatedContext(
   queryText: string,
   options: ContextOptions = {}
 ): Promise<RelatedContext> {
-  const { maxTokens = 4000 } = options;
+  const { maxTokens = DEFAULT_MAX_TOKENS } = options;
 
   const sessions = await findRelatedSessions(queryText, options);
 
@@ -187,7 +216,10 @@ function formatSessionContext(session: RelatedSession): string {
   if (session.keyDecisions && session.keyDecisions.length > 0) {
     parts.push("");
     parts.push("**決定事項:**");
-    for (const decision of session.keyDecisions.slice(0, 3)) {
+    for (const decision of session.keyDecisions.slice(
+      0,
+      MAX_DECISIONS_DISPLAY
+    )) {
       parts.push(`- ${decision}`);
     }
   }
@@ -196,7 +228,7 @@ function formatSessionContext(session: RelatedSession): string {
   if (session.filesModified && session.filesModified.length > 0) {
     parts.push("");
     parts.push("**関連ファイル:**");
-    for (const file of session.filesModified.slice(0, 5)) {
+    for (const file of session.filesModified.slice(0, MAX_FILES_DISPLAY)) {
       parts.push(`- \`${file}\``);
     }
   }
@@ -218,10 +250,8 @@ function estimateTokens(text: string): number {
   const japaneseChars = text.match(/[\u3000-\u9fff]/g) || [];
   const otherChars = text.length - japaneseChars.length;
 
-  // 日本語: 約1.5文字 = 1トークン
-  // 英語: 約4文字 = 1トークン
-  const japaneseTokens = japaneseChars.length / 1.5;
-  const otherTokens = otherChars / 4;
+  const japaneseTokens = japaneseChars.length / JAPANESE_CHARS_PER_TOKEN;
+  const otherTokens = otherChars / ENGLISH_CHARS_PER_TOKEN;
 
   return Math.ceil(japaneseTokens + otherTokens);
 }
