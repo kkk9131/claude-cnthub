@@ -1,4 +1,5 @@
 export type WorkItemStatus =
+  | "not_started"
   | "planning"
   | "in_progress"
   | "review"

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 
 const MAX_MESSAGE_LENGTH = 10000;
 
@@ -10,11 +11,29 @@ interface Message {
   error?: boolean;
 }
 
-interface ChatViewProps {
+export function ChatView() {
+  const { id: sessionId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  // セッションIDがない場合はセッション一覧にリダイレクト
+  useEffect(() => {
+    if (!sessionId) {
+      navigate("/sessions");
+    }
+  }, [sessionId, navigate]);
+
+  if (!sessionId) {
+    return null;
+  }
+
+  return <ChatViewContent sessionId={sessionId} />;
+}
+
+interface ChatViewContentProps {
   sessionId: string;
 }
 
-export function ChatView({ sessionId }: ChatViewProps) {
+function ChatViewContent({ sessionId }: ChatViewContentProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
@@ -123,11 +142,11 @@ export function ChatView({ sessionId }: ChatViewProps) {
   return (
     <div className="flex flex-col h-full">
       {error && (
-        <div className="p-3 bg-red-900/50 border-b border-red-800 text-red-200 text-sm flex justify-between items-center">
+        <div className="p-3 bg-red-50 border-b border-red-200 text-red-700 text-sm flex justify-between items-center">
           <span>{error}</span>
           <button
             onClick={handleRetry}
-            className="text-red-300 hover:text-red-100 underline"
+            className="text-red-600 hover:text-red-800 underline"
           >
             Retry
           </button>
@@ -152,7 +171,7 @@ export function ChatView({ sessionId }: ChatViewProps) {
 
       <form
         onSubmit={handleSubmit}
-        className="p-4 border-t border-gray-800"
+        className="p-4 border-t border-[var(--border-subtle)]"
         aria-label="Send message"
       >
         <div className="flex gap-3">
@@ -217,23 +236,23 @@ const MessageBubble = memo(function MessageBubble({
           max-w-[80%] rounded-2xl px-4 py-3
           ${
             message.error
-              ? "bg-red-900/50 border border-red-700 text-red-200 rounded-br-md"
+              ? "bg-red-100 border border-red-300 text-red-800 rounded-br-md"
               : isUser
-                ? "bg-primary-600 text-white rounded-br-md"
-                : "bg-gray-800 text-gray-100 rounded-bl-md"
+                ? "bg-primary-500 text-white rounded-br-md"
+                : "bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-bl-md"
           }
         `}
       >
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
         {message.error && (
-          <span className="text-xs text-red-400 block mt-1">
+          <span className="text-xs text-red-600 block mt-1">
             Failed to send
           </span>
         )}
         <span
           className={`
             text-xs mt-1 block
-            ${message.error ? "text-red-400" : isUser ? "text-primary-200" : "text-gray-500"}
+            ${message.error ? "text-red-600" : isUser ? "text-primary-100" : "text-[var(--text-muted)]"}
           `}
         >
           {formattedTime}
@@ -248,15 +267,17 @@ function EmptyChat() {
     <div className="flex items-center justify-center h-full text-center">
       <div>
         <div
-          className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4"
+          className="w-16 h-16 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-full flex items-center justify-center mx-auto mb-4"
           aria-hidden="true"
         >
           <span className="text-3xl">💬</span>
         </div>
-        <h3 className="text-lg font-medium text-gray-300 mb-2">
+        <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
           Start the conversation
         </h3>
-        <p className="text-gray-500">Type a message below to begin</p>
+        <p className="text-[var(--text-muted)]">
+          Type a message below to begin
+        </p>
       </div>
     </div>
   );
@@ -275,17 +296,17 @@ function ChatSkeleton() {
             key={i}
             className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}
           >
-            <div className="bg-gray-800 rounded-2xl px-4 py-3 w-64 animate-pulse">
-              <div className="h-4 bg-gray-700 rounded w-full mb-2" />
-              <div className="h-4 bg-gray-700 rounded w-3/4" />
+            <div className="bg-[var(--bg-elevated)] rounded-2xl px-4 py-3 w-64 animate-pulse">
+              <div className="h-4 bg-[var(--border-default)] rounded w-full mb-2" />
+              <div className="h-4 bg-[var(--border-default)] rounded w-3/4" />
             </div>
           </div>
         ))}
       </div>
-      <div className="p-4 border-t border-gray-800">
+      <div className="p-4 border-t border-[var(--border-subtle)]">
         <div className="flex gap-3">
-          <div className="input flex-1 h-10 bg-gray-800 animate-pulse" />
-          <div className="btn-primary w-20 h-10 bg-gray-700 animate-pulse" />
+          <div className="input flex-1 h-10 bg-[var(--bg-elevated)] animate-pulse" />
+          <div className="btn-primary w-20 h-10 bg-[var(--border-default)] animate-pulse" />
         </div>
       </div>
     </div>

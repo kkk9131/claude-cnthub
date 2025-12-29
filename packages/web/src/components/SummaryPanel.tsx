@@ -71,14 +71,18 @@ export function SummaryPanel({ sessionId }: SummaryPanelProps) {
   if (!summary) {
     return (
       <div className="card">
-        <h3 className="text-lg font-medium text-gray-100 mb-4">Summary</h3>
+        <h3 className="text-lg font-medium text-[var(--text-primary)] mb-4">
+          Summary
+        </h3>
         {error && (
-          <p className="text-red-400 text-sm mb-4" role="alert">
+          <p className="text-red-600 text-sm mb-4" role="alert">
             {error}
           </p>
         )}
         <div className="text-center py-6">
-          <p className="text-gray-500 mb-4">No summary available yet</p>
+          <p className="text-[var(--text-muted)] mb-4">
+            No summary available yet
+          </p>
           <button
             onClick={handleGenerate}
             disabled={generating}
@@ -94,7 +98,9 @@ export function SummaryPanel({ sessionId }: SummaryPanelProps) {
   return (
     <div className="card space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-gray-100">Summary</h3>
+        <h3 className="text-lg font-medium text-[var(--text-primary)]">
+          Summary
+        </h3>
         <button
           onClick={handleGenerate}
           disabled={generating}
@@ -105,20 +111,22 @@ export function SummaryPanel({ sessionId }: SummaryPanelProps) {
       </div>
 
       {error && (
-        <p className="text-red-400 text-sm" role="alert">
+        <p className="text-red-600 text-sm" role="alert">
           {error}
         </p>
       )}
 
-      <div className="prose prose-invert prose-sm max-w-none">
-        <p className="text-gray-300 whitespace-pre-wrap">{summary.content}</p>
+      <div className="prose prose-sm max-w-none">
+        <p className="text-[var(--text-secondary)] whitespace-pre-wrap">
+          {summary.content}
+        </p>
       </div>
 
       {summary.decisions && summary.decisions.length > 0 && (
         <section aria-labelledby="decisions-heading">
           <h4
             id="decisions-heading"
-            className="text-sm font-medium text-gray-400 mb-2"
+            className="text-sm font-medium text-[var(--text-secondary)] mb-2"
           >
             Decisions
           </h4>
@@ -126,7 +134,7 @@ export function SummaryPanel({ sessionId }: SummaryPanelProps) {
             {summary.decisions.map((decision, i) => (
               <li
                 key={i}
-                className="flex items-start gap-2 text-sm text-gray-300"
+                className="flex items-start gap-2 text-sm text-[var(--text-primary)]"
               >
                 <span className="text-primary-500" aria-hidden="true">
                   •
@@ -142,7 +150,7 @@ export function SummaryPanel({ sessionId }: SummaryPanelProps) {
         <section aria-labelledby="files-heading">
           <h4
             id="files-heading"
-            className="text-sm font-medium text-gray-400 mb-2"
+            className="text-sm font-medium text-[var(--text-secondary)] mb-2"
           >
             Changed Files
           </h4>
@@ -151,7 +159,7 @@ export function SummaryPanel({ sessionId }: SummaryPanelProps) {
               <code
                 key={i}
                 role="listitem"
-                className="px-2 py-1 bg-gray-800 rounded text-xs text-gray-300 font-mono"
+                className="px-2 py-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded text-xs text-[var(--text-primary)] font-mono"
               >
                 {file}
               </code>
@@ -160,7 +168,7 @@ export function SummaryPanel({ sessionId }: SummaryPanelProps) {
         </section>
       )}
 
-      <div className="text-xs text-gray-600 pt-2 border-t border-gray-800">
+      <div className="text-xs text-[var(--text-muted)] pt-2 border-t border-[var(--border-subtle)]">
         <time dateTime={summary.createdAt}>Last updated: {formattedDate}</time>
       </div>
     </div>
@@ -175,13 +183,13 @@ function SummarySkeleton() {
       aria-label="Loading summary"
     >
       <div className="flex items-center justify-between">
-        <div className="h-6 w-24 bg-gray-800 rounded animate-pulse" />
-        <div className="h-8 w-20 bg-gray-800 rounded animate-pulse" />
+        <div className="h-6 w-24 bg-[var(--bg-elevated)] rounded animate-pulse" />
+        <div className="h-8 w-20 bg-[var(--bg-elevated)] rounded animate-pulse" />
       </div>
       <div className="space-y-2">
-        <div className="h-4 w-full bg-gray-800 rounded animate-pulse" />
-        <div className="h-4 w-3/4 bg-gray-800 rounded animate-pulse" />
-        <div className="h-4 w-5/6 bg-gray-800 rounded animate-pulse" />
+        <div className="h-4 w-full bg-[var(--bg-elevated)] rounded animate-pulse" />
+        <div className="h-4 w-3/4 bg-[var(--bg-elevated)] rounded animate-pulse" />
+        <div className="h-4 w-5/6 bg-[var(--bg-elevated)] rounded animate-pulse" />
       </div>
     </div>
   );

@@ -61,12 +61,12 @@ export function SessionList() {
     return (
       <div className="card text-center py-12">
         <div aria-hidden="true">
-          <ChatIcon className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+          <ChatIcon className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
         </div>
-        <h3 className="text-lg font-medium text-gray-300 mb-2">
+        <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
           No sessions yet
         </h3>
-        <p className="text-gray-500 mb-6">
+        <p className="text-[var(--text-muted)] mb-6">
           Start a new session to begin tracking your work
         </p>
         <button className="btn-primary">Create New Session</button>
@@ -77,9 +77,11 @@ export function SessionList() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-100">Sessions</h2>
+        <h2 className="text-xl font-semibold text-[var(--text-primary)]">
+          Sessions
+        </h2>
         <span
-          className="text-sm text-gray-500"
+          className="text-sm text-[var(--text-muted)]"
           aria-label={`${sessions.length} sessions total`}
         >
           {sessions.length} total
@@ -108,9 +110,9 @@ const statusLabels: Record<Session["status"], string> = {
 const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
   const statusColors = useMemo(
     () => ({
-      active: "bg-green-500",
-      completed: "bg-blue-500",
-      archived: "bg-gray-500",
+      active: "bg-primary-500",
+      completed: "bg-green-500",
+      archived: "bg-gray-400",
     }),
     []
   );
@@ -129,7 +131,7 @@ const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
 
   return (
     <button
-      className="card hover:bg-gray-800/50 transition-colors w-full text-left group"
+      className="card hover:bg-[var(--bg-elevated)] transition-colors w-full text-left group"
       role="listitem"
       aria-label={`Open session: ${session.title}`}
     >
@@ -141,11 +143,11 @@ const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
               role="status"
               aria-label={`Status: ${statusLabels[session.status]}`}
             />
-            <h3 className="font-medium text-gray-100 truncate">
+            <h3 className="font-medium text-[var(--text-primary)] truncate">
               {session.title}
             </h3>
           </div>
-          <div className="flex items-center gap-4 text-sm text-gray-500">
+          <div className="flex items-center gap-4 text-sm text-[var(--text-muted)]">
             <span className="flex items-center gap-1">
               <ClockIcon className="w-4 h-4" />
               <time dateTime={session.updatedAt}>{formattedDate}</time>
@@ -158,7 +160,7 @@ const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
             )}
           </div>
         </div>
-        <ChevronRightIcon className="w-5 h-5 text-gray-600 group-hover:text-gray-400 transition-colors" />
+        <ChevronRightIcon className="w-5 h-5 text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-colors" />
       </div>
     </button>
   );
@@ -168,8 +170,8 @@ function SessionListSkeleton() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading sessions">
       <div className="flex items-center justify-between">
-        <div className="h-7 w-24 bg-gray-800 rounded animate-pulse" />
-        <div className="h-5 w-16 bg-gray-800 rounded animate-pulse" />
+        <div className="h-7 w-24 bg-[var(--bg-elevated)] rounded animate-pulse" />
+        <div className="h-5 w-16 bg-[var(--bg-elevated)] rounded animate-pulse" />
       </div>
       <div className="grid gap-3">
         {[1, 2, 3].map((i) => (
@@ -177,10 +179,10 @@ function SessionListSkeleton() {
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 bg-gray-700 rounded-full" />
-                  <div className="h-5 w-48 bg-gray-800 rounded animate-pulse" />
+                  <div className="w-2 h-2 bg-[var(--border-default)] rounded-full" />
+                  <div className="h-5 w-48 bg-[var(--bg-elevated)] rounded animate-pulse" />
                 </div>
-                <div className="h-4 w-32 bg-gray-800 rounded animate-pulse" />
+                <div className="h-4 w-32 bg-[var(--bg-elevated)] rounded animate-pulse" />
               </div>
             </div>
           </div>

@@ -30,7 +30,7 @@ export function Layout({ children }: LayoutProps) {
   }, [sidebarOpen]);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-950">
+    <div className="h-screen flex flex-col bg-cream-100 text-primary-900">
       <Header onMenuClick={handleMenuToggle} />
       <div className="flex-1 flex overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onClose={handleSidebarClose} />
