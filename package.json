@@ -35,5 +35,9 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "packageManager": "bun@1.1.38"
+  "packageManager": "bun@1.1.38",
+  "dependencies": {
+    "sqlite-vec": "^0.1.7-alpha.2",
+    "voyageai": "^0.1.0"
+  }
 }

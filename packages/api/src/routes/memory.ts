@@ -21,6 +21,11 @@ import {
 } from "../repositories/summary";
 import { generateSummary } from "../services/summarizer";
 import { ListSummariesSchema } from "../schemas";
+import {
+  generateEmbedding,
+  isEmbeddingAvailable,
+} from "../services/embeddings";
+import { saveEmbedding } from "../repositories/embedding";
 
 const memory = new Hono();
 
@@ -60,6 +65,26 @@ memory.post("/sessions/:id/summarize", async (c) => {
     summaryTokenCount: generatedSummary.summaryTokenCount,
     compressionRatio: generatedSummary.compressionRatio,
   });
+
+  // Embedding を生成して保存（セマンティック検索用）
+  if (isEmbeddingAvailable()) {
+    const embeddingText = [
+      savedSummary.shortSummary,
+      savedSummary.detailedSummary,
+      savedSummary.topics.join(" "),
+    ].join("\n");
+
+    const embeddingResult = await generateEmbedding(embeddingText);
+    if (embeddingResult) {
+      saveEmbedding(
+        "summary",
+        savedSummary.summaryId,
+        embeddingResult.embedding,
+        sessionId,
+        savedSummary.shortSummary.slice(0, 200)
+      );
+    }
+  }
 
   return c.json(savedSummary, 200);
 });

@@ -89,9 +89,10 @@ import { migrate } from "./migrations";
 import { migration as migration001 } from "./migrations/001_initial_schema";
 import { migration as migration002 } from "./migrations/002_create_sessions_messages";
 import { migration as migration003 } from "./migrations/003_create_summaries";
+import { migration as migration004 } from "./migrations/004_create_embeddings";
 
 // 全マイグレーションリスト
-const allMigrations = [migration001, migration002, migration003];
+const allMigrations = [migration001, migration002, migration003, migration004];
 
 /**
  * 全マイグレーションを実行

@@ -11,6 +11,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { logger } from "./middleware/logger";
 import { sessionsRouter } from "./routes/sessions";
 import { memoryRouter } from "./routes/memory";
+import searchRouter from "./routes/search";
 
 /**
  * アプリケーションを作成（テスト用にファクトリ関数として提供）
@@ -48,6 +49,9 @@ export function createApp(): Hono {
 
   // Memory API
   newApp.route("/api/memory", memoryRouter);
+
+  // Search API（セマンティック検索）
+  newApp.route("/api/search", searchRouter);
 
   // 404 ハンドラ
   newApp.notFound(notFoundHandler);
