@@ -16,6 +16,5 @@
     "mcp",
     "search"
   ],
-  "hooks": "./hooks/hooks.json",
   "mcpServers": "./.mcp.json"
 }
