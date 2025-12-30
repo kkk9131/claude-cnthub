@@ -21,9 +21,9 @@ Task({
 ### タスク一覧
 {TASK_TABLE}
 
-### TDD ルール
-1. テスト作成 → `bun test` で失敗確認
-2. 実装 → `bun test` で成功確認
+### 実行方法
+1. `/claude-code-harness:core:work` スキルでタスク実行
+2. TDD: テスト作成 → `bun test` で失敗確認 → 実装 → 成功確認
 3. コミット: `feat({TASK_ID}): {DESCRIPTION}`
 
 ### 依存待ち
