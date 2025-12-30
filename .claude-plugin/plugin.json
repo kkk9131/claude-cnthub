@@ -1,0 +1,21 @@
+{
+  "name": "claude-cnthub",
+  "version": "0.1.0",
+  "description": "Session management and AI memory for Claude Code. Captures session summaries, enables semantic search, and provides cross-session context injection.",
+  "author": {
+    "name": "kazuto"
+  },
+  "repository": "https://github.com/kazuto/claude-cnthub",
+  "license": "MIT",
+  "keywords": [
+    "session",
+    "memory",
+    "context",
+    "summary",
+    "hooks",
+    "mcp",
+    "search"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}

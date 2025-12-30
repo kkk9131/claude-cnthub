@@ -1,0 +1,9 @@
+{
+  "cnthub-session": {
+    "command": "node",
+    "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/mcp-server.js"],
+    "env": {
+      "CNTHUB_API_URL": "http://localhost:3001"
+    }
+  }
+}
