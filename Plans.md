@@ -1,111 +1,128 @@
 # Plans.md - claude-cnthub 開発計画
 
 > 最終更新: 2025-12-30
+> ビジョン: 並列AIセッションの協調学習プラットフォーム
 
-## フェーズ1: 基盤構築 `cc:完了`
+## 概要
 
-### 1.1 プロジェクト初期化
-
-- [x] モノレポ構成 (Bun Workspaces) `cc:完了`
-- [x] 共通型定義 (packages/shared) `cc:完了`
-- [x] テスト環境構築 (Vitest) `cc:完了`
-- [x] Git リポジトリ初期化 `cc:完了`
-
-### 1.2 データベース層
-
-- [x] SQLite 接続設定 `cc:完了`
-- [x] マイグレーションシステム `cc:完了`
-- [x] sessions テーブル作成 `cc:完了`
-- [x] messages テーブル作成 `cc:完了`
-- [x] リポジトリパターン実装 `cc:完了`
-
-### 1.3 API 基盤
-
-- [x] Hono アプリケーション設定 `cc:完了`
-- [x] エラーハンドリングミドルウェア `cc:完了`
-- [x] ロギングミドルウェア `cc:完了`
-- [x] Zod バリデーション設定 `cc:完了`
+```
+LLM CLI エージェント（Claude Code, Cursor, etc.）
+         ↓ Hook
+   セッション要約・永続化
+         ↓
+   段階的コンテキスト取得（Level 0/1）
+         ↓
+   マージ・クロスプロジェクト共有
+         ↓
+   GUI ツリー操作 / CLI コマンド
+```
 
 ---
 
-## フェーズ2: コア機能 `cc:完了`
+## 完了済みフェーズ
 
-### 2.1 セッション管理 API `cc:完了`
+<details>
+<summary>フェーズ1〜5（クリックで展開）</summary>
 
-- [x] POST /api/sessions - セッション作成 `cc:完了`
-- [x] GET /api/sessions - 一覧取得 `cc:完了`
-- [x] GET /api/sessions/:id - 詳細取得 `cc:完了`
-- [x] PATCH /api/sessions/:id - 更新 `cc:完了`
-- [x] DELETE /api/sessions/:id - 削除 `cc:完了`
+### フェーズ1: 基盤構築 ✅
+- [x] モノレポ構成、共通型定義、SQLite、Hono API
 
-### 2.2 メッセージ管理 `cc:完了`
+### フェーズ2: コア機能 ✅
+- [x] セッション CRUD、メッセージ管理、WebSocket、AI要約
 
-- [x] POST /api/sessions/:id/messages - メッセージ送信 `cc:完了`
-- [x] GET /api/sessions/:id/messages - メッセージ一覧 `cc:完了`
-- [x] WebSocket リアルタイム通信 `cc:完了`
+### フェーズ3: メモリ・検索 ✅
+- [x] sqlite-vec ベクトル検索、セマンティック検索、コンテキスト注入
 
-### 2.3 AI 要約機能 `cc:完了`
+### フェーズ4: Frontend ✅
+- [x] React + Vite + TailwindCSS、セッション一覧・チャット・検索 UI
 
-- [x] Claude Agent SDK 統合 `cc:完了`
-- [x] セッション要約生成 `cc:完了`
-- [x] メタデータ抽出 (決定事項、変更ファイル) `cc:完了`
+### フェーズ5: Hook 統合 ✅
+- [x] Hook API (`/hook/session-start`, `/hook/session-stop`, `/hook/session-end`)
+- [x] Claude Code プラグイン (`.claude-plugin/`, `hooks/`, `scripts/`)
+- [x] MCP Server (`cnthub-session`: search, list_sessions, get_session, inject_context)
 
----
-
-## フェーズ3: メモリ・検索機能 `cc:完了`
-
-### 3.1 ベクトル検索
-
-- [x] sqlite-vec 拡張導入 `cc:完了`
-- [x] Embedding 生成サービス (Voyage AI) `cc:完了`
-- [x] セマンティック検索 API `cc:完了`
-
-### 3.2 コンテキスト注入
-
-- [x] 関連セッション検索 `cc:完了`
-- [x] コンテキスト組み立て `cc:完了`
-- [x] トークン制限管理 `cc:完了`
+</details>
 
 ---
 
-## フェーズ4: Frontend `cc:完了`
+## フェーズ6: 段階的開示システム `TODO`
 
-### 4.1 基本 UI `cc:完了`
+コンテキスト削減のための Level 0/1 アーキテクチャ。
 
-- [x] React + Vite 設定 `cc:完了`
-- [x] TailwindCSS ダークテーマ `cc:完了`
-- [x] レイアウトコンポーネント `cc:完了`
-
-### 4.2 セッション画面 `cc:完了`
-
-- [x] セッション一覧 `cc:完了`
-- [x] チャット UI `cc:完了`
-- [x] 要約表示 `cc:完了`
-
-### 4.3 検索・Work Items `cc:完了`
-
-- [x] セマンティック検索 UI `cc:完了`
-- [x] Work Item 管理画面 `cc:完了`
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| L-01 | SessionIndex 型定義 (id, sn, status, tags) | - | `feature/session-index-types` |
+| L-02 | Level 0 インデックス API | L-01 | `feature/level0-api` |
+| L-03 | Level 1 要約詳細 API | L-01 | `feature/level1-api` |
+| L-04 | 要約スキーマ拡張（変更差分、エラー履歴、決定事項） | - | `feature/summary-schema` |
+| L-05 | タグ自動抽出サービス | L-04 | `feature/auto-tagging` |
+| L-06 | SN (セッション名) 自動命名 | L-04 | `feature/auto-naming` |
 
 ---
 
-## フェーズ5: Plugin / Hook `cc:TODO`
+## フェーズ7: マージシステム `TODO`
 
-- [ ] Claude Plugin マニフェスト
-- [ ] Hook サーバー実装
-- [ ] hooks.json 設定生成
+要約同士をマージして知識を統合する。
+
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| M-01 | Merge 型定義・DB スキーマ | - | `feature/merge-schema` |
+| M-02 | マージ実行 API (POST /api/merges) | M-01 | `feature/merge-api` |
+| M-03 | AI マージ要約生成サービス | M-02, L-04 | `feature/merge-ai` |
+| M-04 | マージ済み一覧・詳細 API | M-01 | `feature/merge-list-api` |
+| M-05 | マージ抽出 API（マージ済みのみ取得） | M-01 | `feature/merge-filter-api` |
+| M-06 | マージ削除 API | M-01 | `feature/merge-delete-api` |
 
 ---
 
-## 備考
+## フェーズ8: プロジェクト管理 `TODO`
 
-### 優先度
+プロジェクト別管理とクロスプロジェクト共有。
 
-1. **フェーズ1** - 基盤がないと何も始まらない
-2. **フェーズ2.1-2.2** - コア機能の最小セット
-3. **フェーズ2.3 + 3** - AI 機能で差別化
-4. **フェーズ4-5** - UI と統合
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| P-01 | Project 型定義・DB スキーマ | - | `feature/project-schema` |
+| P-02 | プロジェクト CRUD API | P-01 | `feature/project-api` |
+| P-03 | セッション→プロジェクト紐付け | P-01 | `feature/session-project-link` |
+| P-04 | 共有パターン DB スキーマ | P-01, M-01 | `feature/shared-patterns-schema` |
+| P-05 | クロスプロジェクト検索 API | P-04 | `feature/cross-project-search` |
 
-### 技術的決定事項
+---
 
-- [decisions.md](.claude/memory/decisions.md) を参照
+## フェーズ9: GUI ノード操作 `TODO`
+
+ツリー構造でのドラッグ&ドロップ操作。
+
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| G-01 | ツリービューコンポーネント | - | `feature/tree-view` |
+| G-02 | ドラッグ&ドロップ基盤 | G-01 | `feature/dnd-foundation` |
+| G-03 | マージ操作 UI | G-02, M-02 | `feature/merge-ui` |
+| G-04 | プロジェクト切替 UI | P-02 | `feature/project-switcher` |
+| G-05 | クロスプロジェクトマージ UI | G-03, P-04 | `feature/cross-project-merge-ui` |
+| G-06 | マージ済み抽出・削除 UI | M-05, M-06 | `feature/merge-management-ui` |
+
+---
+
+## フェーズ10: CLI ツール `TODO`
+
+コマンドラインからの操作。
+
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| C-01 | CLI パッケージ初期化 (packages/cli) | - | `feature/cli-init` |
+| C-02 | `cnthub list` セッション一覧 | C-01, L-02 | `feature/cli-list` |
+| C-03 | `cnthub search <query>` 検索 | C-01, L-02 | `feature/cli-search` |
+| C-04 | `cnthub merge <ids...>` マージ | C-01, M-02 | `feature/cli-merge` |
+| C-05 | `cnthub inject <id>` コンテキスト注入 | C-01, L-03 | `feature/cli-inject` |
+| C-06 | `cnthub init` hooks.json 生成 | C-01, H-04 | `feature/cli-init-hooks` |
+
+---
+
+## 次の優先タスク
+
+1. **L-01, L-04, M-01, P-01** - 型定義・スキーマ（並列可）
+2. **L-02, M-02, P-02** - コア API
+3. **G-01, C-01** - UI/CLI 基盤
+
+> 詳細なタスクチケットは [TASKS.md](./TASKS.md) を参照
