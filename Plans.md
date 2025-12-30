@@ -1,6 +1,6 @@
 # Plans.md - claude-cnthub 開発計画
 
-> 最終更新: 2025-12-30
+> 最終更新: 2025-12-31
 > ビジョン: 並列AIセッションの協調学習プラットフォーム
 
 ## 概要
@@ -45,33 +45,33 @@ LLM CLI エージェント（Claude Code, Cursor, etc.）
 
 ---
 
-## フェーズ6: 段階的開示システム `TODO`
+## フェーズ6: 段階的開示システム ✅
 
 コンテキスト削減のための Level 0/1 アーキテクチャ。
 
-| ID | タスク | 依存 | ブランチ |
-|----|--------|------|---------|
-| L-01 | SessionIndex 型定義 (id, sn, status, tags) | - | `feature/session-index-types` |
-| L-02 | Level 0 インデックス API | L-01 | `feature/level0-api` |
-| L-03 | Level 1 要約詳細 API | L-01 | `feature/level1-api` |
-| L-04 | 要約スキーマ拡張（変更差分、エラー履歴、決定事項） | - | `feature/summary-schema` |
-| L-05 | タグ自動抽出サービス | L-04 | `feature/auto-tagging` |
-| L-06 | SN (セッション名) 自動命名 | L-04 | `feature/auto-naming` |
+| ID | タスク | 状態 |
+|----|--------|------|
+| L-01 | SessionIndex 型定義 (id, sn, status, tags) | ✅ |
+| L-02 | Level 0 インデックス API | ✅ |
+| L-03 | Level 1 要約詳細 API | ✅ |
+| L-04 | 要約スキーマ拡張（変更差分、エラー履歴、決定事項） | ✅ |
+| L-05 | タグ自動抽出サービス | ✅ |
+| L-06 | SN (セッション名) 自動命名 | ✅ |
 
 ---
 
-## フェーズ7: マージシステム `TODO`
+## フェーズ7: マージシステム ✅
 
 要約同士をマージして知識を統合する。
 
-| ID | タスク | 依存 | ブランチ |
-|----|--------|------|---------|
-| M-01 | Merge 型定義・DB スキーマ | - | `feature/merge-schema` |
-| M-02 | マージ実行 API (POST /api/merges) | M-01 | `feature/merge-api` |
-| M-03 | AI マージ要約生成サービス | M-02, L-04 | `feature/merge-ai` |
-| M-04 | マージ済み一覧・詳細 API | M-01 | `feature/merge-list-api` |
-| M-05 | マージ抽出 API（マージ済みのみ取得） | M-01 | `feature/merge-filter-api` |
-| M-06 | マージ削除 API | M-01 | `feature/merge-delete-api` |
+| ID | タスク | 状態 |
+|----|--------|------|
+| M-01 | Merge 型定義・DB スキーマ | ✅ |
+| M-02 | マージ実行 API (POST /api/merges) | ✅ |
+| M-03 | AI マージ要約生成サービス | ✅ |
+| M-04 | マージ済み一覧・詳細 API | ✅ |
+| M-05 | マージ抽出 API（マージ済みのみ取得） | ✅ |
+| M-06 | マージ削除 API | ✅ |
 
 ---
 
@@ -121,8 +121,8 @@ LLM CLI エージェント（Claude Code, Cursor, etc.）
 
 ## 次の優先タスク
 
-1. **L-01, L-04, M-01, P-01** - 型定義・スキーマ（並列可）
-2. **L-02, M-02, P-02** - コア API
-3. **G-01, C-01** - UI/CLI 基盤
+1. **P-01** - Project 型定義・DB スキーマ
+2. **P-02** - プロジェクト CRUD API
+3. **G-01, C-01** - UI/CLI 基盤（並列可）
 
 > 詳細なタスクチケットは [TASKS.md](./TASKS.md) を参照
