@@ -13,6 +13,7 @@ import { sessionsRouter } from "./routes/sessions";
 import { memoryRouter } from "./routes/memory";
 import searchRouter from "./routes/search";
 import { hooksRouter } from "./routes/hooks";
+import { mergesRouter } from "./routes/merges";
 
 /**
  * アプリケーションを作成（テスト用にファクトリ関数として提供）
@@ -56,6 +57,9 @@ export function createApp(): Hono {
 
   // Hook API（プラグインからのイベント受信）
   newApp.route("/hook", hooksRouter);
+
+  // Merges API（セッションマージ）
+  newApp.route("/api/merges", mergesRouter);
 
   // 404 ハンドラ
   newApp.notFound(notFoundHandler);

@@ -199,3 +199,27 @@ export const HookEventSchema = z.object({
 });
 
 export type HookEvent = z.infer<typeof HookEventSchema>;
+
+// ==================== Merges ====================
+
+/**
+ * マージ作成リクエスト
+ */
+export const CreateMergeSchema = z.object({
+  sourceSessionIds: z
+    .array(z.string())
+    .min(2, "At least 2 sessions are required for merge"),
+  projectId: z.string().optional(),
+});
+
+export type CreateMergeRequest = z.infer<typeof CreateMergeSchema>;
+
+/**
+ * マージ一覧クエリ
+ */
+export const ListMergesSchema = PaginationSchema.extend({
+  status: z.enum(["pending", "processing", "completed", "error"]).optional(),
+  projectId: z.string().optional(),
+});
+
+export type ListMergesQuery = z.infer<typeof ListMergesSchema>;
