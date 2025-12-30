@@ -91,6 +91,7 @@ import { migration as migration002 } from "./migrations/002_create_sessions_mess
 import { migration as migration003 } from "./migrations/003_create_summaries";
 import { migration as migration004 } from "./migrations/004_create_embeddings";
 import { migration as migration005 } from "./migrations/005_add_extended_summary_fields";
+import { migration as migration006 } from "./migrations/006_create_merges";
 
 // 全マイグレーションリスト
 const allMigrations = [
@@ -99,6 +100,7 @@ const allMigrations = [
   migration003,
   migration004,
   migration005,
+  migration006,
 ];
 
 /**

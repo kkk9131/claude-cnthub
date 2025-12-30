@@ -5,6 +5,7 @@ export * from "./types/message";
 export * from "./types/workitem";
 export * from "./types/session-index";
 export * from "./types/summary";
+export * from "./types/merge";
 
 // Constants
 export * from "./constants";

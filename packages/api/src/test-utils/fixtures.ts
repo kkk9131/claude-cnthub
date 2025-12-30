@@ -4,6 +4,8 @@ import type {
   Message,
   SessionSummary,
   WorkItem,
+  Merge,
+  CreateMergeRequest,
 } from "@claude-cnthub/shared";
 
 // Session Fixtures
@@ -82,5 +84,23 @@ export const createWorkItemFixture = (
   priority: 0,
   createdAt: new Date("2024-01-01T00:00:00Z"),
   updatedAt: new Date("2024-01-01T00:00:00Z"),
+  ...overrides,
+});
+
+// Merge Fixtures
+export const createMergeFixture = (overrides: Partial<Merge> = {}): Merge => ({
+  mergeId: "merge_test123",
+  sourceSessionIds: ["sess_1", "sess_2"],
+  resultSummary: "Combined summary of test sessions",
+  status: "pending",
+  createdAt: new Date("2024-01-01T00:00:00Z"),
+  updatedAt: new Date("2024-01-01T00:00:00Z"),
+  ...overrides,
+});
+
+export const createMergeRequestFixture = (
+  overrides: Partial<CreateMergeRequest> = {}
+): CreateMergeRequest => ({
+  sourceSessionIds: ["sess_1", "sess_2"],
   ...overrides,
 });
