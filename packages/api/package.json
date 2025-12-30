@@ -13,6 +13,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",
     "@claude-cnthub/shared": "workspace:*",
+    "@hono/zod-validator": "^0.7.6",
     "hono": "^4.6.0",
     "zod": "^3.24.0"
   },

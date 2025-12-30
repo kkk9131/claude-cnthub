@@ -24,10 +24,46 @@ import {
   listSessions,
   updateSession,
   deleteSession,
+  listSessionIndex,
+  getSessionSummary,
 } from "../repositories/session";
 import { messagesRouter } from "./messages";
 
 const sessionsRouter = new Hono();
+
+/**
+ * GET /sessions/index - セッションインデックス一覧（Level 0）
+ *
+ * 軽量なインデックス情報のみを返す。
+ * 詳細情報はオンデマンドで取得。
+ */
+sessionsRouter.get(
+  "/index",
+  zValidator("query", ListSessionsSchema, (result, c) => {
+    if (!result.success) {
+      return c.json(
+        {
+          error: "Validation Error",
+          details: result.error.flatten().fieldErrors,
+        },
+        400
+      );
+    }
+  }),
+  async (c) => {
+    const query = c.req.valid("query");
+
+    const result = listSessionIndex({
+      page: query.page,
+      limit: query.limit,
+      status: query.status,
+      projectId: query.projectId,
+      workItemId: query.workItemId,
+    });
+
+    return c.json(result);
+  }
+);
 
 /**
  * POST /sessions - セッション作成
@@ -152,6 +188,30 @@ sessionsRouter.delete("/:id", async (c) => {
 
   // 204 No Content
   return c.body(null, 204);
+});
+
+/**
+ * GET /sessions/:id/summary - セッション要約詳細（Level 1）
+ *
+ * 拡張された要約情報を返す。
+ * changes, errors, decisions を含む。
+ */
+sessionsRouter.get("/:id/summary", async (c) => {
+  const id = c.req.param("id");
+
+  // セッションの存在確認
+  const session = getSessionById(id);
+  if (!session) {
+    return c.json({ error: "Session not found", sessionId: id }, 404);
+  }
+
+  // 要約取得
+  const summary = getSessionSummary(id);
+  if (!summary) {
+    return c.json({ error: "Summary not found", sessionId: id }, 404);
+  }
+
+  return c.json(summary);
 });
 
 /**
