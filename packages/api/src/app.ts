@@ -14,7 +14,7 @@ import { memoryRouter } from "./routes/memory";
 import searchRouter from "./routes/search";
 import { hooksRouter } from "./routes/hooks";
 import { mergesRouter } from "./routes/merges";
-import { memoriesRouter } from "./routes/memories";
+import { memoriesRouter, legacyMemoriesRouter } from "./routes/memories";
 import { projectsRouter } from "./routes/projects";
 
 /**
@@ -64,7 +64,10 @@ export function createApp(): Hono {
   newApp.route("/api/merges", mergesRouter);
 
   // Memories API（シンプルなメモリ管理）
-  newApp.route("/memories", memoriesRouter);
+  newApp.route("/api/memories", memoriesRouter);
+
+  // Legacy Memories API（後方互換性のため維持）
+  newApp.route("/memories", legacyMemoriesRouter);
 
   // Projects API（プロジェクト管理）
   newApp.route("/api/projects", projectsRouter);

@@ -83,15 +83,15 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 |----|--------|------|---------|------|
 | P-01 | Project 型定義・DB スキーマ | - | `feature/project-schema` | `cc:完了` |
 | P-02 | プロジェクト CRUD API | P-01 | `feature/project-api` | `cc:完了` |
-| P-03 | セッション→プロジェクト自動紐付け | P-01 | `feature/session-project-link` | `cc:TODO` |
+| P-03 | セッション→プロジェクト自動紐付け | P-01 | `feature/session-project-link` | `cc:完了` |
 
 ### 1-B: Skills 連携
 
 | ID | タスク | 依存 | ブランチ | 状態 |
 |----|--------|------|---------|------|
 | S-01 | cnthub:add Skill 定義 | - | `feature/skill-add` | `cc:完了` |
-| S-02 | cnthub:search Skill 定義 | - | `feature/skill-search` | `cc:TODO` |
-| S-03 | cnthub:gui Skill 定義 | - | `feature/skill-gui` | `cc:TODO` |
+| S-02 | cnthub:search Skill 定義 | - | `feature/skill-search` | `cc:完了` |
+| S-03 | cnthub:gui Skill 定義 | - | `feature/skill-gui` | `cc:完了` |
 
 ### 1-C: GUI ノード操作
 
@@ -99,15 +99,15 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 |----|--------|------|---------|------|
 | G-01 | ツリービューコンポーネント | - | `feature/tree-view` | `cc:完了` |
 | G-02 | ドラッグ&ドロップ基盤 (dnd-kit) | G-01 | `feature/dnd-foundation` | `cc:完了` |
-| G-03 | マージ操作 UI | G-02 | `feature/merge-ui` | `cc:TODO` |
-| G-04 | プロジェクト切替 UI | P-02 | `feature/project-switcher` | `cc:TODO` |
+| G-03 | マージ操作 UI | G-02 | `feature/merge-ui` | `cc:完了` |
+| G-04 | プロジェクト切替 UI | P-02 | `feature/project-switcher` | `cc:完了` |
 
 ### 1-D: サーバー統合
 
 | ID | タスク | 依存 | ブランチ | 状態 |
 |----|--------|------|---------|------|
 | I-01 | サーバー統合 (Port 3048) | - | `feature/unified-server` | `cc:完了` |
-| I-02 | Memory API シンプル化 | I-01 | `feature/simple-memory-api` | `cc:TODO` |
+| I-02 | Memory API シンプル化 | I-01 | `feature/simple-memory-api` | `cc:完了` |
 | I-03 | 新セッション ID 体系 (`ch_ss_0001`) | I-01 | `feature/new-session-id` | `cc:完了` |
 | I-04 | ローカル Embedding フォールバック | - | `feature/local-embedding` | `cc:完了` |
 
@@ -162,9 +162,12 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 5. ~~**P-02** - プロジェクト CRUD API~~ ✅ 完了
 6. ~~**G-02** - ドラッグ&ドロップ基盤 (dnd-kit)~~ ✅ 完了
 7. ~~**S-01** - cnthub:add Skill 定義~~ ✅ 完了
-8. **G-03** - マージ操作 UI
-9. **G-04** - プロジェクト切替 UI
-10. **S-02** - cnthub:search Skill 定義
+8. ~~**G-03** - マージ操作 UI~~ ✅ 完了
+9. ~~**G-04** - プロジェクト切替 UI~~ ✅ 完了
+10. ~~**S-02** - cnthub:search Skill 定義~~ ✅ 完了
+11. ~~**S-03** - cnthub:gui Skill 定義~~ ✅ 完了
+12. ~~**I-02** - Memory API シンプル化~~ ✅ 完了
+13. ~~**P-03** - セッション→プロジェクト自動紐付け~~ ✅ 完了
 
 > 詳細なタスクチケットは [TASKS.md](./TASKS.md) を参照
 

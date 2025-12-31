@@ -10,6 +10,8 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { createApp } from "../app";
 import { closeDatabase, runMigrations, execute } from "../db";
 import { createSessionRequestFixture } from "../test-utils";
+import { createProject, deleteProject } from "../repositories/project";
+import type { Project } from "@claude-cnthub/shared";
 
 // テスト用: インメモリDBを使用
 process.env.DATABASE_PATH = ":memory:";
@@ -346,6 +348,100 @@ describe("Sessions API", () => {
       const json = await res.json();
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  // ===== Project Auto-linking (P-03) =====
+  describe("Project Auto-linking (P-03)", () => {
+    let testProject: Project;
+
+    beforeEach(() => {
+      // テスト用プロジェクトを作成
+      execute("DELETE FROM projects");
+      testProject = createProject({
+        name: "Auto-link Test Project",
+        path: "/Users/test/projects/autolink",
+        description: "Project for auto-linking test",
+      });
+    });
+
+    it("workingDirがプロジェクトパスと一致する場合、自動的にprojectIdを設定する", async () => {
+      const res = await request("POST", "/api/sessions", {
+        name: "Auto-linked Session",
+        workingDir: "/Users/test/projects/autolink",
+      });
+      const json = await res.json();
+
+      expect(res.status).toBe(201);
+      expect(json.projectId).toBe(testProject.projectId);
+    });
+
+    it("workingDirがプロジェクトパスのサブディレクトリの場合、自動的にprojectIdを設定する", async () => {
+      const res = await request("POST", "/api/sessions", {
+        name: "Auto-linked Session from Subdir",
+        workingDir: "/Users/test/projects/autolink/src/components",
+      });
+      const json = await res.json();
+
+      expect(res.status).toBe(201);
+      expect(json.projectId).toBe(testProject.projectId);
+    });
+
+    it("workingDirがどのプロジェクトにもマッチしない場合、projectIdはnull", async () => {
+      const res = await request("POST", "/api/sessions", {
+        name: "Unlinked Session",
+        workingDir: "/Users/other/random/path",
+      });
+      const json = await res.json();
+
+      expect(res.status).toBe(201);
+      expect(json.projectId).toBeNull();
+    });
+
+    it("projectIdを明示的に指定した場合、自動判定をスキップする", async () => {
+      // 別のプロジェクトを作成
+      const anotherProject = createProject({
+        name: "Another Project",
+        path: "/Users/test/other-project",
+        description: "Another project",
+      });
+
+      try {
+        // workingDirはtestProjectにマッチするが、明示的にanotherProjectを指定
+        const res = await request("POST", "/api/sessions", {
+          name: "Explicitly Linked Session",
+          workingDir: "/Users/test/projects/autolink/src",
+          projectId: anotherProject.projectId,
+        });
+        const json = await res.json();
+
+        expect(res.status).toBe(201);
+        expect(json.projectId).toBe(anotherProject.projectId);
+      } finally {
+        deleteProject(anotherProject.projectId);
+      }
+    });
+
+    it("最も具体的な（長いパスの）プロジェクトにマッチする", async () => {
+      // ネストしたプロジェクトを作成
+      const nestedProject = createProject({
+        name: "Nested Project",
+        path: "/Users/test/projects/autolink/packages/nested",
+        description: "Nested project",
+      });
+
+      try {
+        const res = await request("POST", "/api/sessions", {
+          name: "Nested Session",
+          workingDir: "/Users/test/projects/autolink/packages/nested/src",
+        });
+        const json = await res.json();
+
+        expect(res.status).toBe(201);
+        expect(json.projectId).toBe(nestedProject.projectId);
+      } finally {
+        deleteProject(nestedProject.projectId);
+      }
     });
   });
 });

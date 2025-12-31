@@ -27,6 +27,7 @@ import {
   listSessionIndex,
   getSessionSummary,
 } from "../repositories/session";
+import { findProjectByWorkingDir } from "../services/project-linking";
 import { messagesRouter } from "./messages";
 
 const sessionsRouter = new Hono();
@@ -67,6 +68,12 @@ sessionsRouter.get(
 
 /**
  * POST /sessions - セッション作成
+ *
+ * projectId が指定されていない場合、workingDir からプロジェクトを自動判定する。
+ * 判定ロジック:
+ * - workingDir が既存プロジェクトの path に一致 → そのプロジェクトに紐付け
+ * - workingDir が既存プロジェクトの path のサブディレクトリ → そのプロジェクトに紐付け
+ * - マッチなし → プロジェクト紐付けなし（null）
  */
 sessionsRouter.post(
   "/",
@@ -84,12 +91,19 @@ sessionsRouter.post(
   async (c) => {
     const data = c.req.valid("json");
 
+    // projectId が明示的に指定されていない場合、workingDir から自動判定
+    let resolvedProjectId = data.projectId;
+    if (!resolvedProjectId && data.workingDir) {
+      const matchedProject = findProjectByWorkingDir(data.workingDir);
+      resolvedProjectId = matchedProject?.projectId ?? undefined;
+    }
+
     const session = createSession({
       name: data.name,
       workingDir: data.workingDir,
       task: data.task,
       workItemId: data.workItemId,
-      projectId: data.projectId,
+      projectId: resolvedProjectId,
       continueChat: data.continueChat,
       dangerouslySkipPermissions: data.dangerouslySkipPermissions,
     });
