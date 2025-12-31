@@ -79,36 +79,36 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 
 ### 1-A: プロジェクト管理
 
-| ID | タスク | 依存 | ブランチ | 状態 |
-|----|--------|------|---------|------|
-| P-01 | Project 型定義・DB スキーマ | - | `feature/project-schema` | `cc:完了` |
-| P-02 | プロジェクト CRUD API | P-01 | `feature/project-api` | `cc:TODO` |
-| P-03 | セッション→プロジェクト自動紐付け | P-01 | `feature/session-project-link` | `cc:TODO` |
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| P-01 | Project 型定義・DB スキーマ | - | `feature/project-schema` |
+| P-02 | プロジェクト CRUD API | P-01 | `feature/project-api` |
+| P-03 | セッション→プロジェクト自動紐付け | P-01 | `feature/session-project-link` |
 
 ### 1-B: Skills 連携
 
-| ID | タスク | 依存 | ブランチ | 状態 |
-|----|--------|------|---------|------|
-| S-01 | cnthub:add Skill 定義 | - | `feature/skill-add` | `cc:TODO` |
-| S-02 | cnthub:search Skill 定義 | - | `feature/skill-search` | `cc:TODO` |
-| S-03 | cnthub:gui Skill 定義 | - | `feature/skill-gui` | `cc:TODO` |
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| S-01 | cnthub:add Skill 定義 | - | `feature/skill-add` |
+| S-02 | cnthub:search Skill 定義 | - | `feature/skill-search` |
+| S-03 | cnthub:gui Skill 定義 | - | `feature/skill-gui` |
 
 ### 1-C: GUI ノード操作
 
-| ID | タスク | 依存 | ブランチ | 状態 |
-|----|--------|------|---------|------|
-| G-01 | ツリービューコンポーネント | - | `feature/tree-view` | `cc:完了` |
-| G-02 | ドラッグ&ドロップ基盤 (dnd-kit) | G-01 | `feature/dnd-foundation` | `cc:TODO` |
-| G-03 | マージ操作 UI | G-02 | `feature/merge-ui` | `cc:TODO` |
-| G-04 | プロジェクト切替 UI | P-02 | `feature/project-switcher` | `cc:TODO` |
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| G-01 | ツリービューコンポーネント | - | `feature/tree-view` |
+| G-02 | ドラッグ&ドロップ基盤 (dnd-kit) | G-01 | `feature/dnd-foundation` |
+| G-03 | マージ操作 UI | G-02 | `feature/merge-ui` |
+| G-04 | プロジェクト切替 UI | P-02 | `feature/project-switcher` |
 
 ### 1-D: サーバー統合
 
-| ID | タスク | 依存 | ブランチ | 状態 |
-|----|--------|------|---------|------|
-| I-01 | サーバー統合 (Port 3048) | - | `feature/unified-server` | `cc:完了` |
-| I-02 | Memory API シンプル化 | I-01 | `feature/simple-memory-api` | `cc:TODO` |
-| I-03 | 新セッション ID 体系 (`ch_ss_0001`) | I-01 | `feature/new-session-id` | `cc:TODO` |
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| I-01 | サーバー統合 (Port 3048) | - | `feature/unified-server` |
+| I-02 | Memory API シンプル化 | I-01 | `feature/simple-memory-api` |
+| I-03 | 新セッション ID 体系 (`ch_ss_0001`) | I-01 | `feature/new-session-id` |
 
 ### 1-E: CLI (補助)
 
@@ -154,31 +154,9 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 
 ## 次の優先タスク
 
-1. ~~**I-01** - サーバー統合 (Port 3048)~~ ✅ 完了
-2. ~~**P-01** - Project 型定義・DB スキーマ~~ ✅ 完了
-3. ~~**G-01** - ツリービューコンポーネント~~ ✅ 完了
-4. **I-03** - 新セッション ID 体系 (`ch_ss_0001`)
-5. **P-02** - プロジェクト CRUD API
-6. **G-02** - ドラッグ&ドロップ基盤 (dnd-kit)
+1. **I-01** - サーバー統合 (Port 3048)
+2. **I-03** - 新セッション ID 体系
+3. **P-01, P-02** - プロジェクト管理基盤
+4. **G-01, G-02** - ツリービュー・D&D
 
 > 詳細なタスクチケットは [TASKS.md](./TASKS.md) を参照
-
----
-
-## 実装メモ (2026-01-01)
-
-### I-01: サーバー統合 (Port 3048)
-- `packages/api/src/config.ts`: デフォルトポートを 3048 に変更
-- `packages/api/src/routes/memories.ts`: `/memories/add`, `/search`, `/context` 追加
-- `packages/api/src/db/migrations/007_create_observations.ts`: observations テーブル
-- `packages/api/src/repositories/observation.ts`: CRUD 操作
-
-### P-01: Project 型定義
-- `packages/shared/src/types/project.ts`: Project, CreateProjectRequest, UpdateProjectRequest 型
-- `packages/shared/src/index.ts`: エクスポート追加
-- DB スキーマは既存の migration で作成済み (projects テーブル)
-
-### G-01: ツリービューコンポーネント
-- `packages/web/src/components/TreeView/`: TreeNode, TreeBranch, TreeView
-- 12 テストケース (展開/折りたたみ、キーボード操作、アクセシビリティ)
-- アイコン追加: ChevronDownIcon, GitMergeIcon, DocumentIcon

@@ -1,5 +1,6 @@
 version: 1.0.0
-setup_mode: solo
+setup_mode: 2-agent
 language: ja
 initialized_at: 2024-12-27T23:15:00+09:00
-last_verified: 2025-12-29T04:35:00+09:00
+last_verified: 2025-12-31T23:59:00+09:00
+migrated_at: 2025-12-31T23:59:00+09:00
