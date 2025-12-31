@@ -59,6 +59,8 @@ export interface DraggableItemProps {
   disabled?: boolean;
   /** カスタムクラス名 */
   className?: string;
+  /** スクリーンリーダー用のラベル */
+  ariaLabel?: string;
 }
 
 /**
@@ -77,6 +79,8 @@ export interface DroppableZoneProps {
   className?: string;
   /** ドラッグオーバー時のクラス名 */
   activeClassName?: string;
+  /** スクリーンリーダー用のラベル */
+  ariaLabel?: string;
 }
 
 /**

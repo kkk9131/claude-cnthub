@@ -36,9 +36,23 @@ export const EMBEDDING_DIMENSION = EMBEDDING_DIMENSIONS.voyage;
 /** Voyage AI クライアント（遅延初期化） */
 let voyageClient: VoyageAIClient | null = null;
 
+/**
+ * Transformers.js パイプラインの型定義
+ */
+interface TransformersPipelineOutput {
+  data: Float32Array;
+}
+
+interface TransformersPipeline {
+  (
+    text: string,
+    options?: { pooling?: string; normalize?: boolean }
+  ): Promise<TransformersPipelineOutput>;
+}
+
 /** ローカル埋め込みパイプライン（遅延初期化） */
-let localPipeline: any = null;
-let localPipelineLoading: Promise<any> | null = null;
+let localPipeline: TransformersPipeline | null = null;
+let localPipelineLoading: Promise<TransformersPipeline | null> | null = null;
 
 /**
  * 現在アクティブなプロバイダーを取得
@@ -65,7 +79,7 @@ function getVoyageClient(): VoyageAIClient | null {
 /**
  * ローカル埋め込みパイプラインを取得（遅延ロード）
  */
-async function getLocalPipeline(): Promise<any> {
+async function getLocalPipeline(): Promise<TransformersPipeline | null> {
   if (localPipeline) return localPipeline;
 
   // 既にロード中なら待機
@@ -273,17 +287,15 @@ export async function generateEmbeddings(
     }
   }
 
-  // ローカルモデルで個別処理
-  const results: (EmbeddingResult | null)[] = [];
-  for (const text of texts) {
+  // ローカルモデルで並列処理（Promise.all で効率化）
+  const promises = texts.map((text) => {
     if (text && text.trim().length > 0) {
-      results.push(await generateLocalEmbedding(text));
-    } else {
-      results.push(null);
+      return generateLocalEmbedding(text);
     }
-  }
+    return Promise.resolve(null);
+  });
 
-  return results;
+  return Promise.all(promises);
 }
 
 /**

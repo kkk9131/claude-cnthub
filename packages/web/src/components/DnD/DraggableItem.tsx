@@ -6,6 +6,7 @@
  * アクセシビリティ属性を自動的に付与。
  */
 
+import { useMemo } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { DraggableItemProps } from "./types";
@@ -26,6 +27,7 @@ export function DraggableItem({
   children,
   disabled = false,
   className = "",
+  ariaLabel,
 }: DraggableItemProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -34,20 +36,27 @@ export function DraggableItem({
       disabled,
     });
 
-  // ドラッグ中の変形スタイル
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.5 : 1,
-    cursor: disabled ? "default" : "grab",
-  };
+  // ドラッグ中の変形スタイル（メモ化で再計算を抑制）
+  const style = useMemo(
+    () => ({
+      transform: CSS.Translate.toString(transform),
+      opacity: isDragging ? 0.5 : 1,
+      cursor: disabled ? "default" : "grab",
+    }),
+    [transform, isDragging, disabled]
+  );
 
-  // ドラッグ状態に応じたクラス名
-  const stateClasses = [
-    isDragging ? "dragging" : "",
-    disabled ? "drag-disabled" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  // ドラッグ状態に応じたクラス名（メモ化で再計算を抑制）
+  const stateClasses = useMemo(
+    () =>
+      [isDragging ? "dragging" : "", disabled ? "drag-disabled" : ""]
+        .filter(Boolean)
+        .join(" "),
+    [isDragging, disabled]
+  );
+
+  // デフォルトのaria-label
+  const defaultAriaLabel = `Draggable ${data.type} item: ${id}`;
 
   return (
     <div
@@ -60,6 +69,9 @@ export function DraggableItem({
       data-draggable-type={data.type}
       aria-grabbed={isDragging}
       aria-disabled={disabled}
+      aria-label={ariaLabel ?? defaultAriaLabel}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
     >
       {children}
     </div>

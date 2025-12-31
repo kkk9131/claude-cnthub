@@ -16,6 +16,36 @@ import {
 import { AppError, ErrorCode } from "../middleware/error-handler";
 
 /**
+ * プロジェクトパスのバリデーション
+ *
+ * パストラバーサル攻撃を防止
+ */
+function validateProjectPath(path: string): void {
+  // パストラバーサル防止
+  if (path.includes("..")) {
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      "Path cannot contain '..'",
+      400
+    );
+  }
+
+  // 空パス防止
+  if (!path || path.trim().length === 0) {
+    throw new AppError(ErrorCode.VALIDATION_ERROR, "Path cannot be empty", 400);
+  }
+
+  // 不正な文字を防止（英数字、ハイフン、アンダースコア、スラッシュ、ドット、チルダのみ許可）
+  if (!/^[a-zA-Z0-9\-_./~]+$/.test(path)) {
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      "Path contains invalid characters",
+      400
+    );
+  }
+}
+
+/**
  * プロジェクトID生成
  *
  * 形式: ch_pj_XXXX（4桁のシーケンシャルID）
@@ -72,6 +102,9 @@ function toProject(row: Record<string, unknown>): Project {
  */
 export function createProject(data: CreateProjectData): Project {
   try {
+    // パスバリデーション（パストラバーサル対策）
+    validateProjectPath(data.path);
+
     // パスの重複チェック
     const existing = queryOne<Record<string, unknown>>(
       "SELECT project_id FROM projects WHERE path = ?",
@@ -88,6 +121,7 @@ export function createProject(data: CreateProjectData): Project {
 
     const projectId = generateProjectId();
     const timestamp = now();
+    const description = data.description ?? null;
 
     execute(
       `INSERT INTO projects (
@@ -97,12 +131,20 @@ export function createProject(data: CreateProjectData): Project {
       projectId,
       data.name,
       data.path,
-      data.description ?? null,
+      description,
       timestamp,
       timestamp
     );
 
-    return getProjectById(projectId)!;
+    // N+1クエリ回避: INSERT済みデータから直接Projectを構築
+    return {
+      projectId,
+      name: data.name,
+      path: data.path,
+      description,
+      createdAt: new Date(timestamp),
+      updatedAt: new Date(timestamp),
+    };
   } catch (error) {
     if (error instanceof AppError) {
       throw error;
@@ -179,12 +221,6 @@ export function updateProject(
   data: UpdateProjectData
 ): Project | null {
   try {
-    // 存在確認
-    const existing = getProjectById(projectId);
-    if (!existing) {
-      return null;
-    }
-
     const fields: string[] = [];
     const params: (string | number | null)[] = [];
 
@@ -198,19 +234,26 @@ export function updateProject(
       params.push(data.description);
     }
 
+    // 更新フィールドがない場合は現在のプロジェクトを返す
     if (fields.length === 0) {
-      return existing;
+      return getProjectById(projectId);
     }
 
     fields.push("updated_at = ?");
     params.push(now());
     params.push(projectId);
 
-    execute(
+    const result = execute(
       `UPDATE projects SET ${fields.join(", ")} WHERE project_id = ?`,
       ...params
     );
 
+    // N+1クエリ回避: UPDATE結果で存在確認
+    if (result.changes === 0) {
+      return null;
+    }
+
+    // 更新後のデータを取得（1回のSELECTのみ）
     return getProjectById(projectId);
   } catch (error) {
     throw new AppError(

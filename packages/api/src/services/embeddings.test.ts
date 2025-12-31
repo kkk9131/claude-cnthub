@@ -4,10 +4,7 @@
  * ローカルモデル (Transformers.js) と Voyage AI の両方をテスト
  */
 
-import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
-
-// 他のテストファイルのモックの影響を受けないようにリセット
-vi.unmock("./embeddings");
+import { describe, test, expect, beforeEach, afterEach } from "vitest";
 
 import {
   generateEmbedding,

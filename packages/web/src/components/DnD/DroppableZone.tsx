@@ -6,6 +6,7 @@
  * ドラッグオーバー時の視覚的フィードバックを提供。
  */
 
+import { useMemo } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import type { DroppableZoneProps } from "./types";
 
@@ -30,6 +31,7 @@ export function DroppableZone({
   disabled = false,
   className = "",
   activeClassName = "",
+  ariaLabel,
 }: DroppableZoneProps) {
   const { isOver, setNodeRef, active } = useDroppable({
     id,
@@ -37,25 +39,31 @@ export function DroppableZone({
     disabled,
   });
 
-  // ドラッグ中のアイテムが受け入れ可能かチェック
-  const canAccept = (): boolean => {
+  // ドラッグ中のアイテムが受け入れ可能かチェック（メモ化で再計算を抑制）
+  const isAcceptable = useMemo(() => {
     if (!active || !data?.accepts) return true;
     const draggedType = active.data.current?.type;
     if (!draggedType) return true;
     return data.accepts.includes(draggedType);
-  };
+  }, [active, data?.accepts]);
 
-  const isAcceptable = canAccept();
+  // ドロップ状態に応じたクラス名（メモ化で再計算を抑制）
+  const stateClasses = useMemo(
+    () =>
+      [
+        isOver && isAcceptable ? "drop-over" : "",
+        isOver && !isAcceptable ? "drop-rejected" : "",
+        disabled ? "drop-disabled" : "",
+        isOver && activeClassName ? activeClassName : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    [isOver, isAcceptable, disabled, activeClassName]
+  );
 
-  // ドロップ状態に応じたクラス名
-  const stateClasses = [
-    isOver && isAcceptable ? "drop-over" : "",
-    isOver && !isAcceptable ? "drop-rejected" : "",
-    disabled ? "drop-disabled" : "",
-    isOver && activeClassName ? activeClassName : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  // デフォルトのaria-label
+  const acceptsText = data?.accepts?.join(", ") ?? "any items";
+  const defaultAriaLabel = `Drop zone for ${acceptsText}`;
 
   return (
     <div
@@ -65,6 +73,8 @@ export function DroppableZone({
       data-drop-over={isOver}
       data-drop-acceptable={isAcceptable}
       aria-dropeffect={disabled ? "none" : "move"}
+      aria-label={ariaLabel ?? defaultAriaLabel}
+      role="region"
     >
       {children}
     </div>
