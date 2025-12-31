@@ -4,12 +4,19 @@
  * ベクトルデータの保存・検索を担当。
  * sqlite-vec を使用したセマンティック検索を提供。
  *
+ * 2つのベクトルテーブルをサポート:
+ * - vec_embeddings: Voyage AI 用 (1024 次元)
+ * - vec_embeddings_local: ローカルモデル用 (384 次元)
+ *
  * 注意: sqlite-vec が利用不可の環境（テストなど）では
  * ベクトル操作は無効化され、グレースフルに失敗する。
  */
 
 import { getDatabase, query, queryOne, execute } from "../db";
-import { EMBEDDING_DIMENSION } from "../services/embeddings";
+import {
+  EMBEDDING_DIMENSIONS,
+  type EmbeddingProvider,
+} from "../services/embeddings";
 
 /** sqlite-vec が利用可能かどうか */
 let vecAvailable: boolean | null = null;
@@ -32,6 +39,8 @@ export interface EmbeddingIndex {
   sourceId: string;
   sessionId: string | null;
   contentPreview: string | null;
+  dimension: number;
+  provider: EmbeddingProvider;
   createdAt: string;
 }
 
@@ -56,6 +65,16 @@ export interface SessionSearchResult {
   sessionName: string;
   shortSummary: string;
   distance: number;
+}
+
+/**
+ * 次元数からテーブル名を取得
+ */
+function getVecTableName(dimension: number): string {
+  if (dimension === EMBEDDING_DIMENSIONS.local) {
+    return "vec_embeddings_local";
+  }
+  return "vec_embeddings";
 }
 
 /**
@@ -88,6 +107,7 @@ function ensureVecLoaded(): boolean {
  * @param embedding - ベクトルデータ
  * @param sessionId - 関連セッションID（オプション）
  * @param contentPreview - コンテンツプレビュー（検索結果表示用）
+ * @param provider - 使用したプロバイダー
  * @returns 保存された embedding_id（失敗時は -1）
  */
 export function saveEmbedding(
@@ -95,34 +115,37 @@ export function saveEmbedding(
   sourceId: string,
   embedding: number[],
   sessionId: string | null = null,
-  contentPreview: string | null = null
+  contentPreview: string | null = null,
+  provider: EmbeddingProvider = "voyage"
 ): number {
   if (!ensureVecLoaded()) {
     return -1; // sqlite-vec が利用不可
   }
 
   const db = getDatabase();
+  const dimension = embedding.length;
+  const tableName = getVecTableName(dimension);
 
   // 既存の embedding を削除（同じソースに対する更新）
   deleteEmbeddingBySource(sourceType, sourceId);
 
-  // vec_embeddings に挿入
-  const vecStmt = db.prepare(
-    "INSERT INTO vec_embeddings (embedding) VALUES (?)"
-  );
+  // ベクトルテーブルに挿入
+  const vecStmt = db.prepare(`INSERT INTO ${tableName} (embedding) VALUES (?)`);
   const vecResult = vecStmt.run(new Float32Array(embedding));
   const embeddingId = Number(vecResult.lastInsertRowid);
 
   // embedding_index に挿入
   execute(
     `INSERT INTO embedding_index
-      (embedding_id, source_type, source_id, session_id, content_preview)
-     VALUES (?, ?, ?, ?, ?)`,
+      (embedding_id, source_type, source_id, session_id, content_preview, dimension, provider)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     embeddingId,
     sourceType,
     sourceId,
     sessionId,
-    contentPreview
+    contentPreview,
+    dimension,
+    provider
   );
 
   return embeddingId;
@@ -135,17 +158,25 @@ export function deleteEmbeddingBySource(
   sourceType: EmbeddingSourceType,
   sourceId: string
 ): boolean {
-  // 先に embedding_id を取得
-  const row = queryOne<{ embedding_id: number }>(
-    "SELECT embedding_id FROM embedding_index WHERE source_type = ? AND source_id = ?",
+  // 先に embedding 情報を取得
+  const row = queryOne<{ embedding_id: number; dimension: number }>(
+    "SELECT embedding_id, dimension FROM embedding_index WHERE source_type = ? AND source_id = ?",
     sourceType,
     sourceId
   );
 
   if (!row) return false;
 
+  const tableName = getVecTableName(
+    row.dimension ?? EMBEDDING_DIMENSIONS.voyage
+  );
+
   // 両方のテーブルから削除
-  execute("DELETE FROM vec_embeddings WHERE rowid = ?", row.embedding_id);
+  try {
+    execute(`DELETE FROM ${tableName} WHERE rowid = ?`, row.embedding_id);
+  } catch {
+    // テーブルが存在しない場合は無視
+  }
   execute(
     "DELETE FROM embedding_index WHERE source_type = ? AND source_id = ?",
     sourceType,
@@ -161,8 +192,8 @@ export function deleteEmbeddingBySource(
  * バッチ削除で効率化
  */
 export function deleteEmbeddingsBySessionId(sessionId: string): number {
-  const rows = query<{ embedding_id: number }>(
-    "SELECT embedding_id FROM embedding_index WHERE session_id = ?",
+  const rows = query<{ embedding_id: number; dimension: number }>(
+    "SELECT embedding_id, dimension FROM embedding_index WHERE session_id = ?",
     sessionId
   );
 
@@ -170,13 +201,28 @@ export function deleteEmbeddingsBySessionId(sessionId: string): number {
     return 0;
   }
 
-  // バッチ削除で効率化
-  const embeddingIds = rows.map((row) => row.embedding_id);
-  const placeholders = embeddingIds.map(() => "?").join(", ");
-  execute(
-    `DELETE FROM vec_embeddings WHERE rowid IN (${placeholders})`,
-    ...embeddingIds
-  );
+  // 次元ごとにグループ化して削除
+  const byDimension = new Map<number, number[]>();
+  for (const row of rows) {
+    const dim = row.dimension ?? EMBEDDING_DIMENSIONS.voyage;
+    if (!byDimension.has(dim)) {
+      byDimension.set(dim, []);
+    }
+    byDimension.get(dim)!.push(row.embedding_id);
+  }
+
+  for (const [dimension, embeddingIds] of byDimension) {
+    const tableName = getVecTableName(dimension);
+    const placeholders = embeddingIds.map(() => "?").join(", ");
+    try {
+      execute(
+        `DELETE FROM ${tableName} WHERE rowid IN (${placeholders})`,
+        ...embeddingIds
+      );
+    } catch {
+      // テーブルが存在しない場合は無視
+    }
+  }
 
   const result = execute(
     "DELETE FROM embedding_index WHERE session_id = ?",
@@ -189,6 +235,7 @@ export function deleteEmbeddingsBySessionId(sessionId: string): number {
  * セマンティック検索を実行
  *
  * クエリベクトルに類似した Embedding を検索
+ * 注意: クエリの次元と同じ次元の埋め込みのみ検索される
  *
  * @param queryEmbedding - クエリベクトル
  * @param limit - 取得件数（デフォルト: 10）
@@ -205,6 +252,9 @@ export function searchSimilar(
   }
   const db = getDatabase();
 
+  const dimension = queryEmbedding.length;
+  const tableName = getVecTableName(dimension);
+
   let sql = `
     SELECT
       ei.embedding_id,
@@ -213,13 +263,15 @@ export function searchSimilar(
       ei.session_id,
       ei.content_preview,
       ve.distance
-    FROM vec_embeddings ve
+    FROM ${tableName} ve
     INNER JOIN embedding_index ei ON ve.rowid = ei.embedding_id
     WHERE ve.embedding MATCH ?
+      AND ei.dimension = ?
   `;
 
   const params: (Float32Array | string | number)[] = [
     new Float32Array(queryEmbedding),
+    dimension,
   ];
 
   if (sourceTypes && sourceTypes.length > 0) {
@@ -231,24 +283,29 @@ export function searchSimilar(
   sql += ` AND k = ? ORDER BY ve.distance`;
   params.push(limit);
 
-  const stmt = db.prepare(sql);
-  const rows = stmt.all(...params) as {
-    embedding_id: number;
-    source_type: string;
-    source_id: string;
-    session_id: string | null;
-    content_preview: string | null;
-    distance: number;
-  }[];
+  try {
+    const stmt = db.prepare(sql);
+    const rows = stmt.all(...params) as {
+      embedding_id: number;
+      source_type: string;
+      source_id: string;
+      session_id: string | null;
+      content_preview: string | null;
+      distance: number;
+    }[];
 
-  return rows.map((row) => ({
-    embeddingId: row.embedding_id,
-    sourceType: row.source_type as EmbeddingSourceType,
-    sourceId: row.source_id,
-    sessionId: row.session_id,
-    contentPreview: row.content_preview,
-    distance: row.distance,
-  }));
+    return rows.map((row) => ({
+      embeddingId: row.embedding_id,
+      sourceType: row.source_type as EmbeddingSourceType,
+      sourceId: row.source_id,
+      sessionId: row.session_id,
+      contentPreview: row.content_preview,
+      distance: row.distance,
+    }));
+  } catch (error) {
+    console.error("[Embedding] Search failed:", error);
+    return [];
+  }
 }
 
 /**
@@ -269,37 +326,50 @@ export function searchSimilarSessions(
   }
   const db = getDatabase();
 
+  const dimension = queryEmbedding.length;
+  const tableName = getVecTableName(dimension);
+
   const sql = `
     SELECT
       s.session_id,
       s.name as session_name,
       sm.short_summary,
       ve.distance
-    FROM vec_embeddings ve
+    FROM ${tableName} ve
     INNER JOIN embedding_index ei ON ve.rowid = ei.embedding_id
     INNER JOIN sessions s ON ei.session_id = s.session_id
     LEFT JOIN summaries sm ON s.session_id = sm.session_id
     WHERE ve.embedding MATCH ?
       AND ei.source_type = 'summary'
+      AND ei.dimension = ?
       AND s.deleted_at IS NULL
       AND k = ?
     ORDER BY ve.distance
   `;
 
-  const stmt = db.prepare(sql);
-  const rows = stmt.all(new Float32Array(queryEmbedding), limit) as {
-    session_id: string;
-    session_name: string;
-    short_summary: string | null;
-    distance: number;
-  }[];
+  try {
+    const stmt = db.prepare(sql);
+    const rows = stmt.all(
+      new Float32Array(queryEmbedding),
+      dimension,
+      limit
+    ) as {
+      session_id: string;
+      session_name: string;
+      short_summary: string | null;
+      distance: number;
+    }[];
 
-  return rows.map((row) => ({
-    sessionId: row.session_id,
-    sessionName: row.session_name,
-    shortSummary: row.short_summary ?? "",
-    distance: row.distance,
-  }));
+    return rows.map((row) => ({
+      sessionId: row.session_id,
+      sessionName: row.session_name,
+      shortSummary: row.short_summary ?? "",
+      distance: row.distance,
+    }));
+  } catch (error) {
+    console.error("[Embedding] Session search failed:", error);
+    return [];
+  }
 }
 
 /**
@@ -321,4 +391,35 @@ export function hasEmbedding(sessionId: string): boolean {
     sessionId
   );
   return (row?.count ?? 0) > 0;
+}
+
+/**
+ * Embedding の統計情報を取得
+ */
+export function getEmbeddingStats(): {
+  total: number;
+  byProvider: Record<string, number>;
+  byDimension: Record<number, number>;
+} {
+  const total = countEmbeddings();
+
+  const providerRows = query<{ provider: string; count: number }>(
+    "SELECT COALESCE(provider, 'voyage') as provider, COUNT(*) as count FROM embedding_index GROUP BY provider"
+  );
+
+  const dimensionRows = query<{ dimension: number; count: number }>(
+    "SELECT COALESCE(dimension, 1024) as dimension, COUNT(*) as count FROM embedding_index GROUP BY dimension"
+  );
+
+  const byProvider: Record<string, number> = {};
+  for (const row of providerRows) {
+    byProvider[row.provider] = row.count;
+  }
+
+  const byDimension: Record<number, number> = {};
+  for (const row of dimensionRows) {
+    byDimension[row.dimension] = row.count;
+  }
+
+  return { total, byProvider, byDimension };
 }

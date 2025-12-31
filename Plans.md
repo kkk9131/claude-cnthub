@@ -109,6 +109,7 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 | I-01 | サーバー統合 (Port 3048) | - | `feature/unified-server` | `cc:完了` |
 | I-02 | Memory API シンプル化 | I-01 | `feature/simple-memory-api` | `cc:TODO` |
 | I-03 | 新セッション ID 体系 (`ch_ss_0001`) | I-01 | `feature/new-session-id` | `cc:完了` |
+| I-04 | ローカル Embedding フォールバック | - | `feature/local-embedding` | `cc:完了` |
 
 ### 1-E: CLI (補助)
 
@@ -209,3 +210,9 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 - `.claude/skills/cnthub-add/SKILL.md`: スキル定義
 - コンテキスト追加コマンド (`/cnthub:add`)
 - 対応タイプ: decision, learning, note, tool_use, error, file_change
+
+### I-04: ローカル Embedding フォールバック
+- `packages/api/src/services/embeddings.ts`: Voyage AI + Transformers.js 二重対応
+- `packages/api/src/db/migrations/008_add_local_embeddings.ts`: 384次元テーブル追加
+- VOYAGE_API_KEY なしでもセマンティック検索が利用可能に
+- モデル: Xenova/all-MiniLM-L6-v2 (384次元、ローカル実行)
