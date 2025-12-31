@@ -1,20 +1,32 @@
 # Plans.md - claude-cnthub 開発計画
 
 > 最終更新: 2025-12-31
-> ビジョン: 並列AIセッションの協調学習プラットフォーム
+> ビジョン: LLM セッションの永続化・コンテキスト共有・クロスLLM連携プラットフォーム
 
 ## 概要
 
 ```
-LLM CLI エージェント（Claude Code, Cursor, etc.）
-         ↓ Hook
-   セッション要約・永続化
+Phase 1: Claude Code Plugin
+──────────────────────────────────────────────────
+LLM CLI エージェント (Claude Code)
+         ↓ Hooks
+   セッション記録・永続化
          ↓
-   段階的コンテキスト取得（Level 0/1）
+   段階的コンテキスト取得 (Level 0/1)
          ↓
-   マージ・クロスプロジェクト共有
+   マージ・知識統合
          ↓
-   GUI ツリー操作 / CLI コマンド
+   GUI 操作 (ノード操作・検索)
+
+Phase 2: Cross-LLM 連携
+──────────────────────────────────────────────────
+         ┌── Claude Code (Hooks)
+         │
+cnthub ──┼── ChatGPT (REST API)
+         │
+         └── Codex / 他 LLM (REST API)
+
+GUI でコンテキストをドラッグ&ドロップで転送
 ```
 
 ---
@@ -22,7 +34,7 @@ LLM CLI エージェント（Claude Code, Cursor, etc.）
 ## 完了済みフェーズ
 
 <details>
-<summary>フェーズ1〜5（クリックで展開）</summary>
+<summary>フェーズ1〜7（クリックで展開）</summary>
 
 ### フェーズ1: 基盤構築 ✅
 - [x] モノレポ構成、共通型定義、SQLite、Hono API
@@ -41,88 +53,110 @@ LLM CLI エージェント（Claude Code, Cursor, etc.）
 - [x] Claude Code プラグイン (`.claude-plugin/`, `hooks/`, `scripts/`)
 - [x] MCP Server (`cnthub-session`: search, list_sessions, get_session, inject_context)
 
+### フェーズ6: 段階的開示システム ✅
+- [x] L-01: SessionIndex 型定義
+- [x] L-02: Level 0 インデックス API
+- [x] L-03: Level 1 要約詳細 API
+- [x] L-04: 要約スキーマ拡張
+- [x] L-05: タグ自動抽出サービス
+- [x] L-06: SN 自動命名
+
+### フェーズ7: マージシステム ✅
+- [x] M-01: Merge 型定義・DB スキーマ
+- [x] M-02: マージ実行 API
+- [x] M-03: AI マージ要約生成サービス
+- [x] M-04: マージ済み一覧・詳細 API
+- [x] M-05: マージ抽出 API
+- [x] M-06: マージ削除 API
+
 </details>
 
 ---
 
-## フェーズ6: 段階的開示システム ✅
+## Phase 1: Claude Code Plugin `現在`
 
-コンテキスト削減のための Level 0/1 アーキテクチャ。
+Claude Code Plugin として動作し、セッション永続化・コンテキスト注入・GUI 操作を実現。
 
-| ID | タスク | 状態 |
-|----|--------|------|
-| L-01 | SessionIndex 型定義 (id, sn, status, tags) | ✅ |
-| L-02 | Level 0 インデックス API | ✅ |
-| L-03 | Level 1 要約詳細 API | ✅ |
-| L-04 | 要約スキーマ拡張（変更差分、エラー履歴、決定事項） | ✅ |
-| L-05 | タグ自動抽出サービス | ✅ |
-| L-06 | SN (セッション名) 自動命名 | ✅ |
-
----
-
-## フェーズ7: マージシステム ✅
-
-要約同士をマージして知識を統合する。
-
-| ID | タスク | 状態 |
-|----|--------|------|
-| M-01 | Merge 型定義・DB スキーマ | ✅ |
-| M-02 | マージ実行 API (POST /api/merges) | ✅ |
-| M-03 | AI マージ要約生成サービス | ✅ |
-| M-04 | マージ済み一覧・詳細 API | ✅ |
-| M-05 | マージ抽出 API（マージ済みのみ取得） | ✅ |
-| M-06 | マージ削除 API | ✅ |
-
----
-
-## フェーズ8: プロジェクト管理 `TODO`
-
-プロジェクト別管理とクロスプロジェクト共有。
+### 1-A: プロジェクト管理
 
 | ID | タスク | 依存 | ブランチ |
 |----|--------|------|---------|
 | P-01 | Project 型定義・DB スキーマ | - | `feature/project-schema` |
 | P-02 | プロジェクト CRUD API | P-01 | `feature/project-api` |
-| P-03 | セッション→プロジェクト紐付け | P-01 | `feature/session-project-link` |
-| P-04 | 共有パターン DB スキーマ | P-01, M-01 | `feature/shared-patterns-schema` |
-| P-05 | クロスプロジェクト検索 API | P-04 | `feature/cross-project-search` |
+| P-03 | セッション→プロジェクト自動紐付け | P-01 | `feature/session-project-link` |
 
----
+### 1-B: Skills 連携
 
-## フェーズ9: GUI ノード操作 `TODO`
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| S-01 | cnthub:add Skill 定義 | - | `feature/skill-add` |
+| S-02 | cnthub:search Skill 定義 | - | `feature/skill-search` |
+| S-03 | cnthub:gui Skill 定義 | - | `feature/skill-gui` |
 
-ツリー構造でのドラッグ&ドロップ操作。
+### 1-C: GUI ノード操作
 
 | ID | タスク | 依存 | ブランチ |
 |----|--------|------|---------|
 | G-01 | ツリービューコンポーネント | - | `feature/tree-view` |
-| G-02 | ドラッグ&ドロップ基盤 | G-01 | `feature/dnd-foundation` |
-| G-03 | マージ操作 UI | G-02, M-02 | `feature/merge-ui` |
+| G-02 | ドラッグ&ドロップ基盤 (dnd-kit) | G-01 | `feature/dnd-foundation` |
+| G-03 | マージ操作 UI | G-02 | `feature/merge-ui` |
 | G-04 | プロジェクト切替 UI | P-02 | `feature/project-switcher` |
-| G-05 | クロスプロジェクトマージ UI | G-03, P-04 | `feature/cross-project-merge-ui` |
-| G-06 | マージ済み抽出・削除 UI | M-05, M-06 | `feature/merge-management-ui` |
 
----
-
-## フェーズ10: CLI ツール `TODO`
-
-コマンドラインからの操作。
+### 1-D: サーバー統合
 
 | ID | タスク | 依存 | ブランチ |
 |----|--------|------|---------|
-| C-01 | CLI パッケージ初期化 (packages/cli) | - | `feature/cli-init` |
-| C-02 | `cnthub list` セッション一覧 | C-01, L-02 | `feature/cli-list` |
-| C-03 | `cnthub search <query>` 検索 | C-01, L-02 | `feature/cli-search` |
-| C-04 | `cnthub merge <ids...>` マージ | C-01, M-02 | `feature/cli-merge` |
-| C-05 | `cnthub inject <id>` コンテキスト注入 | C-01, L-03 | `feature/cli-inject` |
-| C-06 | `cnthub init` hooks.json 生成 | C-01, H-04 | `feature/cli-init-hooks` |
+| I-01 | サーバー統合 (Port 3048) | - | `feature/unified-server` |
+| I-02 | Memory API シンプル化 | I-01 | `feature/simple-memory-api` |
+| I-03 | 新セッション ID 体系 (`ch_ss_0001`) | I-01 | `feature/new-session-id` |
+
+### 1-E: CLI (補助)
+
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| C-01 | CLI パッケージ初期化 | - | `feature/cli-init` |
+| C-02 | `cnthub list` セッション一覧 | C-01 | `feature/cli-list` |
+| C-03 | `cnthub search` 検索 | C-01 | `feature/cli-search` |
+| C-04 | `cnthub merge` マージ | C-01 | `feature/cli-merge` |
+
+---
+
+## Phase 2: Cross-LLM 連携 `計画`
+
+他 LLM (ChatGPT, Codex 等) へのコンテキスト転送を GUI で実現。
+
+### 2-A: Profile System
+
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| PF-01 | project_profiles テーブル | P-01 | `feature/profile-schema` |
+| PF-02 | Static/Dynamic Facts API | PF-01 | `feature/profile-api` |
+| PF-03 | Dynamic Facts 自動更新 | PF-02 | `feature/profile-auto-update` |
+
+### 2-B: LLM 接続
+
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| L-01 | LLM 接続設定 DB スキーマ | - | `feature/llm-connections` |
+| L-02 | ChatGPT Adapter | L-01 | `feature/chatgpt-adapter` |
+| L-03 | Codex Adapter | L-01 | `feature/codex-adapter` |
+| L-04 | 接続管理 API | L-01 | `feature/connection-api` |
+
+### 2-C: コンテキスト転送 UI
+
+| ID | タスク | 依存 | ブランチ |
+|----|--------|------|---------|
+| T-01 | LLM 接続管理ページ | L-04 | `feature/llm-page` |
+| T-02 | コンテキスト転送ページ | T-01, PF-02 | `feature/transfer-page` |
+| T-03 | コンテキストプレビュー・編集 | T-02 | `feature/context-preview` |
 
 ---
 
 ## 次の優先タスク
 
-1. **P-01** - Project 型定義・DB スキーマ
-2. **P-02** - プロジェクト CRUD API
-3. **G-01, C-01** - UI/CLI 基盤（並列可）
+1. **I-01** - サーバー統合 (Port 3048)
+2. **I-03** - 新セッション ID 体系
+3. **P-01, P-02** - プロジェクト管理基盤
+4. **G-01, G-02** - ツリービュー・D&D
 
 > 詳細なタスクチケットは [TASKS.md](./TASKS.md) を参照

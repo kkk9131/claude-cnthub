@@ -2,12 +2,26 @@
 
 ## 概要
 
-| 項目                     | 内容               |
-| ------------------------ | ------------------ |
-| **テストフレームワーク** | Vitest（Bun 互換） |
-| **E2E テスト**           | Playwright         |
-| **カバレッジ目標**       | 80% 以上           |
-| **開発手法**             | TDD 必須           |
+| 項目 | 内容 |
+|------|------|
+| **テストフレームワーク** | Bun Test (Vitest 互換) |
+| **E2E テスト** | Playwright |
+| **カバレッジ目標** | 80% 以上 |
+| **開発手法** | TDD 必須 |
+
+---
+
+## セッション ID 体系
+
+テストでは以下の ID 形式を使用:
+
+```typescript
+// 本番 ID 形式
+const sessionId = "ch_ss_0001";
+const mergeId = "ch_mg_0001";
+const projectId = "ch_pj_0001";
+const observationId = "ch_ob_0001";
+```
 
 ---
 
