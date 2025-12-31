@@ -63,7 +63,8 @@ describe("Sessions API", () => {
 
       expect(res.status).toBe(201);
       expect(json.sessionId).toBeDefined();
-      expect(json.sessionId).toMatch(/^sess-/);
+      // 新ID体系: ch_ss_XXXX
+      expect(json.sessionId).toMatch(/^ch_ss_\d{4}$/);
       expect(json.name).toBe("Test Session");
       expect(json.workingDir).toBe("/tmp/test");
       expect(json.status).toBe("idle");

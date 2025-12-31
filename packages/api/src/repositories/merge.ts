@@ -4,6 +4,7 @@
  * マージデータのCRUD操作を提供
  */
 
+import { generateSequentialId } from "@claude-cnthub/shared";
 import { query, queryOne, execute, getDatabase } from "../db";
 import type { Merge, MergeStatus } from "@claude-cnthub/shared";
 
@@ -35,11 +36,28 @@ function toMerge(row: MergeRow): Merge {
   };
 }
 
-// ID生成
+/**
+ * 次のマージ連番を取得
+ */
+function getNextMergeSequence(): number {
+  // ch_mg_XXXX = 10文字 (ch_mg_ = 6文字 + XXXX = 4文字)
+  const result = queryOne<{ max_seq: number | null }>(
+    `SELECT MAX(
+      CAST(SUBSTR(merge_id, 7) AS INTEGER)
+    ) as max_seq
+    FROM merges
+    WHERE merge_id LIKE 'ch_mg_%'
+      AND LENGTH(merge_id) = 10`
+  );
+
+  const maxSeq = result?.max_seq ?? 0;
+  return maxSeq + 1;
+}
+
+// ID生成（新ID体系）
 function generateMergeId(): string {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
-  return `merge_${timestamp}${random}`;
+  const nextSeq = getNextMergeSequence();
+  return generateSequentialId("MERGE", nextSeq);
 }
 
 /**

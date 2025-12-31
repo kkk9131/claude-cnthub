@@ -4,9 +4,9 @@
  * observations テーブルへのCRUD操作を提供
  */
 
+import { generateSequentialId } from "@claude-cnthub/shared";
 import { query, queryOne, execute } from "../db";
 import {
-  generateId,
   now,
   calculatePagination,
   type PaginationOptions,
@@ -103,11 +103,30 @@ function toObservation(row: ObservationRow): Observation {
 }
 
 /**
+ * 次の観測記録連番を取得
+ */
+function getNextObservationSequence(): number {
+  // ch_ob_XXXX = 10文字 (ch_ob_ = 6文字 + XXXX = 4文字)
+  const result = queryOne<{ max_seq: number | null }>(
+    `SELECT MAX(
+      CAST(SUBSTR(observation_id, 7) AS INTEGER)
+    ) as max_seq
+    FROM observations
+    WHERE observation_id LIKE 'ch_ob_%'
+      AND LENGTH(observation_id) = 10`
+  );
+
+  const maxSeq = result?.max_seq ?? 0;
+  return maxSeq + 1;
+}
+
+/**
  * 観測記録を作成
  */
 export function createObservation(data: CreateObservationData): Observation {
   try {
-    const observationId = generateId("obs");
+    const nextSeq = getNextObservationSequence();
+    const observationId = generateSequentialId("OBSERVATION", nextSeq);
     const timestamp = now();
 
     execute(

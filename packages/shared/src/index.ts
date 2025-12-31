@@ -10,3 +10,6 @@ export * from "./types/merge";
 
 // Constants
 export * from "./constants";
+
+// Utils
+export * from "./utils/id-generator";

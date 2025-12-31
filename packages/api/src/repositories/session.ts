@@ -11,9 +11,9 @@ import type {
   SessionIndexListResponse,
   ExtendedSessionSummary,
 } from "@claude-cnthub/shared";
+import { generateSequentialId, parseId } from "@claude-cnthub/shared";
 import { query, queryOne, execute } from "../db";
 import {
-  generateId,
   now,
   calculatePagination,
   rowToEntity,
@@ -66,11 +66,34 @@ function toSession(row: Record<string, unknown>): Session {
 }
 
 /**
+ * 次のセッション連番を取得
+ *
+ * 新ID体系(ch_ss_XXXX)と旧ID体系(sess-UUID)の両方をサポート
+ * 新体系のIDから最大連番を取得し、次の連番を返す
+ */
+function getNextSessionSequence(): number {
+  // 新ID体系のセッションのみを対象に最大連番を取得
+  // ch_ss_XXXX = 10文字 (ch_ss_ = 6文字 + XXXX = 4文字)
+  const result = queryOne<{ max_seq: number | null }>(
+    `SELECT MAX(
+      CAST(SUBSTR(session_id, 7) AS INTEGER)
+    ) as max_seq
+    FROM sessions
+    WHERE session_id LIKE 'ch_ss_%'
+      AND LENGTH(session_id) = 10`
+  );
+
+  const maxSeq = result?.max_seq ?? 0;
+  return maxSeq + 1;
+}
+
+/**
  * セッションを作成
  */
 export function createSession(data: CreateSessionData): Session {
   try {
-    const sessionId = generateId("sess");
+    const nextSeq = getNextSessionSequence();
+    const sessionId = generateSequentialId("SESSION", nextSeq);
     const timestamp = now();
 
     execute(

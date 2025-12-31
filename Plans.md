@@ -1,6 +1,6 @@
 # Plans.md - claude-cnthub 開発計画
 
-> 最終更新: 2025-12-31
+> 最終更新: 2026-01-01
 > ビジョン: LLM セッションの永続化・コンテキスト共有・クロスLLM連携プラットフォーム
 
 ## 概要
@@ -82,14 +82,14 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 | ID | タスク | 依存 | ブランチ | 状態 |
 |----|--------|------|---------|------|
 | P-01 | Project 型定義・DB スキーマ | - | `feature/project-schema` | `cc:完了` |
-| P-02 | プロジェクト CRUD API | P-01 | `feature/project-api` | `cc:TODO` |
+| P-02 | プロジェクト CRUD API | P-01 | `feature/project-api` | `cc:完了` |
 | P-03 | セッション→プロジェクト自動紐付け | P-01 | `feature/session-project-link` | `cc:TODO` |
 
 ### 1-B: Skills 連携
 
 | ID | タスク | 依存 | ブランチ | 状態 |
 |----|--------|------|---------|------|
-| S-01 | cnthub:add Skill 定義 | - | `feature/skill-add` | `cc:TODO` |
+| S-01 | cnthub:add Skill 定義 | - | `feature/skill-add` | `cc:完了` |
 | S-02 | cnthub:search Skill 定義 | - | `feature/skill-search` | `cc:TODO` |
 | S-03 | cnthub:gui Skill 定義 | - | `feature/skill-gui` | `cc:TODO` |
 
@@ -98,7 +98,7 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 | ID | タスク | 依存 | ブランチ | 状態 |
 |----|--------|------|---------|------|
 | G-01 | ツリービューコンポーネント | - | `feature/tree-view` | `cc:完了` |
-| G-02 | ドラッグ&ドロップ基盤 (dnd-kit) | G-01 | `feature/dnd-foundation` | `cc:TODO` |
+| G-02 | ドラッグ&ドロップ基盤 (dnd-kit) | G-01 | `feature/dnd-foundation` | `cc:完了` |
 | G-03 | マージ操作 UI | G-02 | `feature/merge-ui` | `cc:TODO` |
 | G-04 | プロジェクト切替 UI | P-02 | `feature/project-switcher` | `cc:TODO` |
 
@@ -108,7 +108,7 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 |----|--------|------|---------|------|
 | I-01 | サーバー統合 (Port 3048) | - | `feature/unified-server` | `cc:完了` |
 | I-02 | Memory API シンプル化 | I-01 | `feature/simple-memory-api` | `cc:TODO` |
-| I-03 | 新セッション ID 体系 (`ch_ss_0001`) | I-01 | `feature/new-session-id` | `cc:TODO` |
+| I-03 | 新セッション ID 体系 (`ch_ss_0001`) | I-01 | `feature/new-session-id` | `cc:完了` |
 
 ### 1-E: CLI (補助)
 
@@ -157,9 +157,13 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 1. ~~**I-01** - サーバー統合 (Port 3048)~~ ✅ 完了
 2. ~~**P-01** - Project 型定義・DB スキーマ~~ ✅ 完了
 3. ~~**G-01** - ツリービューコンポーネント~~ ✅ 完了
-4. **I-03** - 新セッション ID 体系 (`ch_ss_0001`)
-5. **P-02** - プロジェクト CRUD API
-6. **G-02** - ドラッグ&ドロップ基盤 (dnd-kit)
+4. ~~**I-03** - 新セッション ID 体系 (`ch_ss_0001`)~~ ✅ 完了
+5. ~~**P-02** - プロジェクト CRUD API~~ ✅ 完了
+6. ~~**G-02** - ドラッグ&ドロップ基盤 (dnd-kit)~~ ✅ 完了
+7. ~~**S-01** - cnthub:add Skill 定義~~ ✅ 完了
+8. **G-03** - マージ操作 UI
+9. **G-04** - プロジェクト切替 UI
+10. **S-02** - cnthub:search Skill 定義
 
 > 詳細なタスクチケットは [TASKS.md](./TASKS.md) を参照
 
@@ -182,3 +186,26 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 - `packages/web/src/components/TreeView/`: TreeNode, TreeBranch, TreeView
 - 12 テストケース (展開/折りたたみ、キーボード操作、アクセシビリティ)
 - アイコン追加: ChevronDownIcon, GitMergeIcon, DocumentIcon
+
+### I-03: 新セッション ID 体系 (`ch_ss_0001`)
+- `packages/shared/src/utils/id-generator.ts`: ID 生成ユーティリティ
+- ID プレフィックス: `ch_ss_` (セッション), `ch_mg_` (マージ), `ch_pj_` (プロジェクト), `ch_ob_` (観測記録)
+- 各リポジトリ (session.ts, merge.ts, observation.ts) を新 ID 体系に対応
+- 10 テストケース (ID 生成・パース・バリデーション)
+
+### P-02: プロジェクト CRUD API
+- `packages/api/src/repositories/project.ts`: CRUD 操作
+- `packages/api/src/routes/projects.ts`: REST API エンドポイント
+- エンドポイント: GET/POST `/api/projects`, GET/PUT/DELETE `/api/projects/:id`
+- 11 テストケース (一覧・作成・取得・更新・削除)
+
+### G-02: ドラッグ&ドロップ基盤 (dnd-kit)
+- `packages/web/src/components/DnD/`: DnDProvider, DraggableItem, DroppableZone
+- @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities をインストール
+- アクセシブル (キーボード・ポインターセンサー対応)
+- 型フィルタリング (project, session, merge)
+
+### S-01: cnthub:add Skill 定義
+- `.claude/skills/cnthub-add/SKILL.md`: スキル定義
+- コンテキスト追加コマンド (`/cnthub:add`)
+- 対応タイプ: decision, learning, note, tool_use, error, file_change

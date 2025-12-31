@@ -75,7 +75,8 @@ describe("Merges API", () => {
 
       expect(res.status).toBe(201);
       expect(json.mergeId).toBeDefined();
-      expect(json.mergeId).toMatch(/^merge_/);
+      // 新ID体系: ch_mg_XXXX
+      expect(json.mergeId).toMatch(/^ch_mg_\d{4}$/);
       expect(json.sourceSessionIds).toEqual([
         session1.sessionId,
         session2.sessionId,

@@ -15,6 +15,7 @@ import searchRouter from "./routes/search";
 import { hooksRouter } from "./routes/hooks";
 import { mergesRouter } from "./routes/merges";
 import { memoriesRouter } from "./routes/memories";
+import { projectsRouter } from "./routes/projects";
 
 /**
  * アプリケーションを作成（テスト用にファクトリ関数として提供）
@@ -64,6 +65,9 @@ export function createApp(): Hono {
 
   // Memories API（シンプルなメモリ管理）
   newApp.route("/memories", memoriesRouter);
+
+  // Projects API（プロジェクト管理）
+  newApp.route("/api/projects", projectsRouter);
 
   // 404 ハンドラ
   newApp.notFound(notFoundHandler);
