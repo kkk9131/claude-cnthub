@@ -1,0 +1,18 @@
+{
+  "name": "claude-cnthub-marketplace",
+  "owner": {
+    "name": "kazuto"
+  },
+  "metadata": {
+    "description": "LLM session persistence and context sharing for Claude Code",
+    "homepage": "https://github.com/kkk9131/claude-cnthub"
+  },
+  "plugins": [
+    {
+      "name": "claude-cnthub",
+      "version": "0.1.0",
+      "source": "./plugin",
+      "description": "Session management, semantic search, and cross-session context injection"
+    }
+  ]
+}

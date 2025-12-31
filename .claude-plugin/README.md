@@ -60,7 +60,7 @@ claude plugin install claude-cnthub
 環境変数（オプション）:
 
 ```bash
-CNTHUB_API_URL=http://localhost:3001  # API サーバーのURL（デフォルト: localhost:3001）
+CNTHUB_API_URL=http://localhost:3048  # API サーバーのURL（デフォルト: localhost:3048）
 ```
 
 ## ファイル構成

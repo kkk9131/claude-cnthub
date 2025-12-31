@@ -5,7 +5,7 @@
   "author": {
     "name": "kazuto"
   },
-  "repository": "https://github.com/kazuto/claude-cnthub",
+  "repository": "https://github.com/kkk9131/claude-cnthub",
   "license": "MIT",
   "keywords": [
     "session",
@@ -21,7 +21,7 @@
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/mcp-server.js"],
       "env": {
-        "CNTHUB_API_URL": "http://localhost:3001"
+        "CNTHUB_API_URL": "http://localhost:3048"
       }
     }
   }
