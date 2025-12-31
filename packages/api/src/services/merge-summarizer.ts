@@ -46,47 +46,70 @@ export interface ParsedMergeResponse {
 }
 
 /**
- * DBからセッション要約を取得
+ * DB行の型定義
  */
-function getSummaryBySessionId(
-  sessionId: string
-): SessionSummaryForMerge | null {
-  const rows = dbQuery(
-    `SELECT session_id, short_summary, detailed_summary, topics, key_decisions
-     FROM summaries
-     WHERE session_id = ?
-     LIMIT 1`,
-    sessionId
-  ) as Array<{
-    session_id: string;
-    short_summary: string;
-    detailed_summary: string;
-    topics: string;
-    key_decisions: string;
-  }>;
-
-  if (rows.length === 0) {
-    return null;
-  }
-
-  const row = rows[0];
-  return {
-    sessionId: row.session_id,
-    shortSummary: row.short_summary || "",
-    detailedSummary: row.detailed_summary || "",
-    topics: safeParseJSON(row.topics, []),
-    keyDecisions: safeParseJSON(row.key_decisions, []),
-  };
+interface SummaryRow {
+  session_id: string;
+  short_summary: string | null;
+  detailed_summary: string | null;
+  topics: string | null;
+  key_decisions: string | null;
 }
 
 /**
- * 安全にJSONをパース
+ * 正規表現パターン（モジュールレベルで事前コンパイル）
  */
-function safeParseJSON<T>(json: string | null | undefined, fallback: T): T {
+const REGEX_SHORT_SUMMARY = /SHORT_SUMMARY:\s*(.+?)(?=DETAILED_SUMMARY:|$)/s;
+const REGEX_DETAILED_SUMMARY = /DETAILED_SUMMARY:\s*(.+?)(?=KEY_DECISIONS:|$)/s;
+const REGEX_KEY_DECISIONS = /KEY_DECISIONS:\s*(.+?)(?=TOPICS:|$)/s;
+const REGEX_TOPICS = /TOPICS:\s*(.+)$/s;
+
+/**
+ * 複数セッションの要約を一括取得（N+1問題を解決）
+ */
+function getSummariesBySessionIds(
+  sessionIds: string[]
+): SessionSummaryForMerge[] {
+  if (sessionIds.length === 0) return [];
+
+  // プレースホルダーを動的に生成
+  const placeholders = sessionIds.map(() => "?").join(",");
+
+  const rows = dbQuery(
+    `SELECT session_id, short_summary, detailed_summary, topics, key_decisions
+     FROM summaries
+     WHERE session_id IN (${placeholders})`,
+    ...sessionIds
+  ) as SummaryRow[];
+
+  return rows.map((row) => ({
+    sessionId: row.session_id,
+    shortSummary: row.short_summary || "",
+    detailedSummary: row.detailed_summary || "",
+    topics: safeParseJSON(row.topics, [], `sessionId:${row.session_id}:topics`),
+    keyDecisions: safeParseJSON(
+      row.key_decisions,
+      [],
+      `sessionId:${row.session_id}:keyDecisions`
+    ),
+  }));
+}
+
+/**
+ * 安全にJSONをパース（エラー時はログ出力）
+ */
+function safeParseJSON<T>(
+  json: string | null | undefined,
+  fallback: T,
+  context: string = "unknown"
+): T {
   if (!json) return fallback;
   try {
     return JSON.parse(json);
-  } catch {
+  } catch (error) {
+    console.warn(
+      `[Merge Summarizer] JSON parse failed - context: ${context}, value: ${json.substring(0, 100)}`
+    );
     return fallback;
   }
 }
@@ -108,14 +131,8 @@ export async function generateMergeSummary(
     };
   }
 
-  // 各セッションの要約を取得
-  const summaries: SessionSummaryForMerge[] = [];
-  for (const sessionId of sessionIds) {
-    const summary = getSummaryBySessionId(sessionId);
-    if (summary) {
-      summaries.push(summary);
-    }
-  }
+  // 一括取得（N+1問題を解決）
+  const summaries = getSummariesBySessionIds(sessionIds);
 
   // 有効な要約がない場合
   if (summaries.length === 0) {
@@ -149,7 +166,7 @@ export async function generateMergeSummary(
   try {
     // Claude Agent SDKで統合要約を生成
     const prompt = buildMergePrompt(summaries);
-    let responseText = "";
+    const textChunks: string[] = [];
 
     for await (const message of query({
       prompt,
@@ -161,11 +178,13 @@ export async function generateMergeSummary(
       if (message.type === "assistant" && message.message?.content) {
         for (const block of message.message.content) {
           if ("text" in block) {
-            responseText += block.text;
+            textChunks.push(block.text);
           }
         }
       }
     }
+
+    const responseText = textChunks.join("");
 
     // レスポンスをパース
     const parsed = parseMergeResponse(responseText);
@@ -177,28 +196,34 @@ export async function generateMergeSummary(
       topics: parsed.topics,
       keyDecisions: parsed.keyDecisions,
     };
-  } catch {
+  } catch (error) {
+    // エラーをログに記録
+    console.error("[Merge Summarizer] AI query failed, using fallback:", {
+      error: error instanceof Error ? error.message : String(error),
+      sessionIds,
+      timestamp: new Date().toISOString(),
+    });
+
     // グレースフルデグラデーション: フォールバック要約を返す
     return createFallbackMergeSummary(summaries);
   }
 }
 
 /**
- * マージ用プロンプトを構築
+ * マージ用プロンプトを構築（文字列結合最適化）
  */
 export function buildMergePrompt(summaries: SessionSummaryForMerge[]): string {
-  let sessionSummaries = "";
-
-  for (let i = 0; i < summaries.length; i++) {
-    const s = summaries[i];
-    sessionSummaries += `
+  const sessionSummaries = summaries
+    .map(
+      (s, i) => `
 ### セッション ${i + 1} (${s.sessionId})
 **概要**: ${s.shortSummary}
 **詳細**: ${s.detailedSummary}
 **トピック**: ${s.topics.join(", ") || "なし"}
 **決定事項**: ${s.keyDecisions.join(", ") || "なし"}
-`;
-  }
+`
+    )
+    .join("");
 
   return `以下の複数セッションの要約を1つに統合してください。
 
@@ -218,7 +243,7 @@ TOPICS:（関連トピックをカンマ区切りで）
 }
 
 /**
- * AIレスポンスをパース
+ * AIレスポンスをパース（事前コンパイル済み正規表現を使用）
  */
 export function parseMergeResponse(text: string): ParsedMergeResponse {
   const result: ParsedMergeResponse = {
@@ -231,23 +256,19 @@ export function parseMergeResponse(text: string): ParsedMergeResponse {
   if (!text) return result;
 
   // SHORT_SUMMARY
-  const shortMatch = text.match(
-    /SHORT_SUMMARY:\s*(.+?)(?=DETAILED_SUMMARY:|$)/s
-  );
+  const shortMatch = text.match(REGEX_SHORT_SUMMARY);
   if (shortMatch) {
     result.shortSummary = shortMatch[1].trim();
   }
 
   // DETAILED_SUMMARY
-  const detailedMatch = text.match(
-    /DETAILED_SUMMARY:\s*(.+?)(?=KEY_DECISIONS:|$)/s
-  );
+  const detailedMatch = text.match(REGEX_DETAILED_SUMMARY);
   if (detailedMatch) {
     result.detailedSummary = detailedMatch[1].trim();
   }
 
   // KEY_DECISIONS
-  const decisionsMatch = text.match(/KEY_DECISIONS:\s*(.+?)(?=TOPICS:|$)/s);
+  const decisionsMatch = text.match(REGEX_KEY_DECISIONS);
   if (decisionsMatch) {
     const decisionsText = decisionsMatch[1].trim();
     result.keyDecisions = decisionsText
@@ -257,7 +278,7 @@ export function parseMergeResponse(text: string): ParsedMergeResponse {
   }
 
   // TOPICS
-  const topicsMatch = text.match(/TOPICS:\s*(.+)$/s);
+  const topicsMatch = text.match(REGEX_TOPICS);
   if (topicsMatch) {
     const topicsText = topicsMatch[1].trim();
     result.topics = topicsText
@@ -289,20 +310,15 @@ export function createFallbackMergeSummary(
   const shortSummary = summaries.map((s) => s.shortSummary).join(" / ");
   const detailedSummary = summaries.map((s) => s.detailedSummary).join("\n\n");
 
-  // トピックと決定事項を統合（重複排除）
-  const topicsSet = new Set<string>();
-  const decisionsSet = new Set<string>();
-
-  for (const s of summaries) {
-    s.topics.forEach((t) => topicsSet.add(t));
-    s.keyDecisions.forEach((d) => decisionsSet.add(d));
-  }
+  // トピックと決定事項を統合（重複排除・flatMap使用）
+  const topics = [...new Set(summaries.flatMap((s) => s.topics))];
+  const keyDecisions = [...new Set(summaries.flatMap((s) => s.keyDecisions))];
 
   return {
     success: true,
     shortSummary,
     detailedSummary,
-    topics: Array.from(topicsSet),
-    keyDecisions: Array.from(decisionsSet),
+    topics,
+    keyDecisions,
   };
 }
