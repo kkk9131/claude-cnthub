@@ -16,7 +16,7 @@ import { z } from "zod";
 const configSchema = z.object({
   /** API サーバー設定 */
   api: z.object({
-    port: z.coerce.number().default(3001),
+    port: z.coerce.number().default(3048),
     nodeEnv: z
       .enum(["development", "production", "test"])
       .default("development"),

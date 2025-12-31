@@ -1,19 +1,21 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ChatIcon, ClockIcon, ChevronRightIcon } from "./icons";
 
 interface Session {
-  id: string;
-  title: string;
-  status: "active" | "completed" | "archived";
+  sessionId: string;
+  name: string;
+  status: "idle" | "active" | "completed" | "error";
   createdAt: string;
   updatedAt: string;
-  messageCount?: number;
+  workingDir?: string;
 }
 
 export function SessionList() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -24,7 +26,7 @@ export function SessionList() {
         throw new Error("Failed to fetch sessions");
       }
       const data = await response.json();
-      setSessions(data.sessions || []);
+      setSessions(data.items || []);
     } catch (err) {
       // Sanitize error message - don't expose technical details
       setError("Unable to load sessions. Please try again.");
@@ -40,6 +42,29 @@ export function SessionList() {
 
   const handleRetry = useCallback(() => {
     fetchSessions();
+  }, [fetchSessions]);
+
+  const handleCreateSession = useCallback(async () => {
+    try {
+      setCreating(true);
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `Session ${new Date().toLocaleString("ja-JP")}`,
+          workingDir: window.location.pathname || "/",
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to create session");
+      }
+      await fetchSessions();
+    } catch (err) {
+      console.error("Error creating session:", err);
+      setError("Failed to create session. Please try again.");
+    } finally {
+      setCreating(false);
+    }
   }, [fetchSessions]);
 
   if (loading) {
@@ -69,7 +94,13 @@ export function SessionList() {
         <p className="text-[var(--text-muted)] mb-6">
           Start a new session to begin tracking your work
         </p>
-        <button className="btn-primary">Create New Session</button>
+        <button
+          className="btn-primary disabled:opacity-50"
+          onClick={handleCreateSession}
+          disabled={creating}
+        >
+          {creating ? "Creating..." : "Create New Session"}
+        </button>
       </div>
     );
   }
@@ -90,7 +121,7 @@ export function SessionList() {
 
       <div className="grid gap-3" role="list" aria-label="Session list">
         {sessions.map((session) => (
-          <SessionCard key={session.id} session={session} />
+          <SessionCard key={session.sessionId} session={session} />
         ))}
       </div>
     </div>
@@ -102,17 +133,25 @@ interface SessionCardProps {
 }
 
 const statusLabels: Record<Session["status"], string> = {
+  idle: "Idle",
   active: "Active",
   completed: "Completed",
-  archived: "Archived",
+  error: "Error",
 };
 
 const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
+  const navigate = useNavigate();
+
+  const handleClick = useCallback(() => {
+    navigate(`/sessions/${session.sessionId}`);
+  }, [navigate, session.sessionId]);
+
   const statusColors = useMemo(
     () => ({
+      idle: "bg-gray-400",
       active: "bg-primary-500",
       completed: "bg-green-500",
-      archived: "bg-gray-400",
+      error: "bg-red-500",
     }),
     []
   );
@@ -133,7 +172,8 @@ const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
     <button
       className="card hover:bg-[var(--bg-elevated)] transition-colors w-full text-left group"
       role="listitem"
-      aria-label={`Open session: ${session.title}`}
+      aria-label={`Open session: ${session.name}`}
+      onClick={handleClick}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
@@ -144,7 +184,7 @@ const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
               aria-label={`Status: ${statusLabels[session.status]}`}
             />
             <h3 className="font-medium text-[var(--text-primary)] truncate">
-              {session.title}
+              {session.name}
             </h3>
           </div>
           <div className="flex items-center gap-4 text-sm text-[var(--text-muted)]">
@@ -152,10 +192,9 @@ const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
               <ClockIcon className="w-4 h-4" />
               <time dateTime={session.updatedAt}>{formattedDate}</time>
             </span>
-            {session.messageCount !== undefined && (
-              <span className="flex items-center gap-1">
-                <ChatIcon className="w-4 h-4" />
-                {session.messageCount} messages
+            {session.workingDir && (
+              <span className="text-xs truncate max-w-48">
+                {session.workingDir}
               </span>
             )}
           </div>

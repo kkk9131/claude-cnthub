@@ -47,7 +47,9 @@ async function main() {
     if (error.name === "AbortError") {
       console.error("[cnthub] Request timeout");
     } else {
-      console.error(`[cnthub] Session end hook error: ${getErrorMessage(error)}`);
+      console.error(
+        `[cnthub] Session end hook error: ${getErrorMessage(error)}`
+      );
     }
     process.exit(0);
   }

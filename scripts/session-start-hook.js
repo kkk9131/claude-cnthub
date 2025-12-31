@@ -43,13 +43,17 @@ async function main() {
     }
 
     const result = await response.json();
-    console.error(`[cnthub] Session registered: ${result.id || context.session_id}`);
+    console.error(
+      `[cnthub] Session registered: ${result.id || context.session_id}`
+    );
     process.exit(0);
   } catch (error) {
     if (error.name === "AbortError") {
       console.error("[cnthub] Request timeout");
     } else {
-      console.error(`[cnthub] Session start hook error: ${getErrorMessage(error)}`);
+      console.error(
+        `[cnthub] Session start hook error: ${getErrorMessage(error)}`
+      );
     }
     process.exit(0);
   }

@@ -89,7 +89,9 @@ async function readTranscript(transcriptPath) {
           transcript.push(message);
           // メッセージ数制限
           if (transcript.length >= MAX_MESSAGES) {
-            console.error(`[cnthub] Transcript truncated to ${MAX_MESSAGES} messages`);
+            console.error(
+              `[cnthub] Transcript truncated to ${MAX_MESSAGES} messages`
+            );
             break;
           }
         }
@@ -98,7 +100,9 @@ async function readTranscript(transcriptPath) {
       }
     }
   } catch (error) {
-    console.error(`[cnthub] Failed to read transcript: ${getErrorMessage(error)}`);
+    console.error(
+      `[cnthub] Failed to read transcript: ${getErrorMessage(error)}`
+    );
   }
 
   return transcript;
@@ -134,14 +138,18 @@ async function main() {
     }
 
     const result = await response.json();
-    console.error(`[cnthub] Summary generated for session: ${context.session_id}`);
+    console.error(
+      `[cnthub] Summary generated for session: ${context.session_id}`
+    );
 
     process.exit(0);
   } catch (error) {
     if (error.name === "AbortError") {
       console.error("[cnthub] Request timeout");
     } else {
-      console.error(`[cnthub] Session stop hook error: ${getErrorMessage(error)}`);
+      console.error(
+        `[cnthub] Session stop hook error: ${getErrorMessage(error)}`
+      );
     }
     process.exit(0);
   }

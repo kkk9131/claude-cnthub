@@ -3,7 +3,14 @@
  *
  * 作業項目の一覧と管理を行う。
  */
-import { useEffect, useCallback, useState, useEffect as useEffectOnce, memo, useRef } from "react";
+import {
+  useEffect,
+  useCallback,
+  useState,
+  useEffect as useEffectOnce,
+  memo,
+  useRef,
+} from "react";
 import { Link } from "react-router-dom";
 import {
   useWorkItemStore,
@@ -106,8 +113,8 @@ export function WorkItemsPage() {
 
       {/* エラー表示 */}
       {error && (
-        <div className="card bg-red-50 border-red-200 mb-6">
-          <div className="flex items-center gap-2 text-red-600">
+        <div className="card bg-red-900/30 border-red-800 mb-6">
+          <div className="flex items-center gap-2 text-red-400">
             <ExclamationCircleIcon className="w-5 h-5" />
             <span>{error}</span>
           </div>
@@ -190,7 +197,14 @@ const WorkItemCard = memo(function WorkItemCard({ item }: { item: WorkItem }) {
                 <span>Progress</span>
                 <span>{item.progress}%</span>
               </div>
-              <div className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden" role="progressbar" aria-valuenow={item.progress} aria-valuemin={0} aria-valuemax={100} aria-label={`Progress: ${item.progress} percent`}>
+              <div
+                className="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden"
+                role="progressbar"
+                aria-valuenow={item.progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`Progress: ${item.progress} percent`}
+              >
                 <div
                   className="h-full bg-[var(--color-primary-500)] rounded-full transition-all duration-300"
                   style={{ width: `${item.progress}%` }}
@@ -238,31 +252,35 @@ function StatusIcon({ status }: { status: WorkItemStatus }) {
 }
 
 /** ステータスバッジ */
-const StatusBadge = memo(function StatusBadge({ status }: { status: WorkItemStatus }) {
+const StatusBadge = memo(function StatusBadge({
+  status,
+}: {
+  status: WorkItemStatus;
+}) {
   const config: Record<WorkItemStatus, { label: string; className: string }> = {
     not_started: {
       label: "Not Started",
-      className: "bg-gray-100 text-gray-800",
+      className: "bg-gray-800 text-gray-400",
     },
     planning: {
       label: "Planning",
-      className: "bg-purple-100 text-purple-800",
+      className: "bg-purple-900/40 text-purple-400",
     },
     in_progress: {
       label: "In Progress",
-      className: "bg-blue-100 text-blue-800",
+      className: "bg-blue-900/40 text-blue-400",
     },
     review: {
       label: "Review",
-      className: "bg-yellow-100 text-yellow-800",
+      className: "bg-yellow-900/40 text-yellow-400",
     },
     completed: {
       label: "Completed",
-      className: "bg-green-100 text-green-800",
+      className: "bg-green-900/40 text-green-400",
     },
     blocked: {
       label: "Blocked",
-      className: "bg-red-100 text-red-800",
+      className: "bg-red-900/40 text-red-400",
     },
   };
 

@@ -6,9 +6,8 @@
 
 /** API ベース URL */
 export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:3001";
+  import.meta.env.VITE_API_URL || "http://localhost:3048";
 
 /** WebSocket URL */
 export const WS_URL =
-  import.meta.env.VITE_WS_URL ||
-  API_BASE_URL.replace(/^http/, "ws");
+  import.meta.env.VITE_WS_URL || API_BASE_URL.replace(/^http/, "ws");

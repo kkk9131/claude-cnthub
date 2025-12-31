@@ -139,7 +139,9 @@ hooksRouter.post(
         );
 
         summary = await generateSummary(data.sessionId, messages);
-        console.error(`[Hook] Summary generated for session: ${data.sessionId}`);
+        console.error(
+          `[Hook] Summary generated for session: ${data.sessionId}`
+        );
       } catch (error) {
         console.error(`[Hook] Summary generation failed:`, error);
         // 要約生成失敗でもセッションは継続

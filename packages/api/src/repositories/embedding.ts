@@ -17,7 +17,11 @@ let vecAvailable: boolean | null = null;
 /**
  * Embedding ソースの種類
  */
-export type EmbeddingSourceType = "summary" | "message" | "work_item";
+export type EmbeddingSourceType =
+  | "summary"
+  | "message"
+  | "work_item"
+  | "observation";
 
 /**
  * Embedding インデックスのレコード
@@ -41,6 +45,7 @@ export interface SearchResult {
   sessionId: string | null;
   contentPreview: string | null;
   distance: number;
+  createdAt?: Date;
 }
 
 /**

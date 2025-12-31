@@ -1,10 +1,13 @@
-import { SearchIcon, MenuIcon } from "./icons";
+import { SearchIcon, MenuIcon, MoonIcon, SunIcon } from "./icons";
+import { useTheme } from "../hooks/useTheme";
 
 interface HeaderProps {
   onMenuClick?: () => void;
 }
 
 export function Header({ onMenuClick }: HeaderProps) {
+  const { theme, toggleTheme } = useTheme();
+
   return (
     <header className="h-14 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] flex items-center justify-between px-4">
       <div className="flex items-center gap-3">
@@ -33,6 +36,19 @@ export function Header({ onMenuClick }: HeaderProps) {
             className="input pl-10 w-64"
           />
         </div>
+        <button
+          onClick={toggleTheme}
+          className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] transition-colors"
+          aria-label={
+            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+          }
+        >
+          {theme === "dark" ? (
+            <SunIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+          ) : (
+            <MoonIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+          )}
+        </button>
       </div>
     </header>
   );

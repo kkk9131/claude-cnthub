@@ -108,14 +108,16 @@ export function SearchPage() {
           Loading search status...
         </div>
       ) : !status?.available ? (
-        <div className="card bg-yellow-50 border-yellow-200">
+        <div className="card bg-yellow-900/30 border-yellow-800">
           <div className="flex items-start gap-3">
-            <ExclamationCircleIcon className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <ExclamationCircleIcon className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
             <div>
-              <h3 className="font-medium text-yellow-900">
+              <h3 className="font-medium text-yellow-300">
                 Search not available
               </h3>
-              <p className="text-sm text-yellow-700 mt-1">{status?.message}</p>
+              <p className="text-sm text-yellow-400/80 mt-1">
+                {status?.message}
+              </p>
             </div>
           </div>
         </div>
@@ -123,8 +125,8 @@ export function SearchPage() {
         <>
           {/* 検索結果 */}
           {error && (
-            <div className="card bg-red-50 border-red-200 mb-6">
-              <div className="flex items-center gap-2 text-red-600">
+            <div className="card bg-red-900/30 border-red-800 mb-6">
+              <div className="flex items-center gap-2 text-red-400">
                 <ExclamationCircleIcon className="w-5 h-5" />
                 <span>{error}</span>
               </div>
@@ -180,7 +182,11 @@ export function SearchPage() {
 }
 
 /** 検索結果カード */
-const SearchResultCard = memo(function SearchResultCard({ result }: { result: SearchResult }) {
+const SearchResultCard = memo(function SearchResultCard({
+  result,
+}: {
+  result: SearchResult;
+}) {
   const formatScore = (score: number) => Math.round(score * 100);
 
   return (
@@ -199,10 +205,10 @@ const SearchResultCard = memo(function SearchResultCard({ result }: { result: Se
             <span
               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                 result.relevanceScore > 0.8
-                  ? "bg-green-100 text-green-800"
+                  ? "bg-green-900/40 text-green-400"
                   : result.relevanceScore > 0.5
-                    ? "bg-yellow-100 text-yellow-800"
-                    : "bg-gray-100 text-gray-800"
+                    ? "bg-yellow-900/40 text-yellow-400"
+                    : "bg-gray-800 text-gray-400"
               }`}
             >
               {formatScore(result.relevanceScore)}% match

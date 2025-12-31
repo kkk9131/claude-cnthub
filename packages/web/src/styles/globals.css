@@ -30,7 +30,19 @@
 
 @layer base {
   :root {
-    /* Anthropic light theme */
+    /* ダークモード（デフォルト） - CLAUDE.md: "ダークモード統一" */
+    --bg-base: #0f0f0e;
+    --bg-surface: #1a1a19;
+    --bg-elevated: #242423;
+    --border-subtle: #3a3a39;
+    --border-default: #4a4a49;
+    --text-primary: #f5f5f1;
+    --text-secondary: #a9a9a4;
+    --text-muted: #707070;
+  }
+
+  /* ライトモード（オプション - class ベース） */
+  .light {
     --bg-base: #faf9f5;
     --bg-surface: #ffffff;
     --bg-elevated: #fdfbf7;
@@ -38,12 +50,12 @@
     --border-default: #dcd9cd;
     --text-primary: #141413;
     --text-secondary: #5c5650;
-    /* A bit softer than pure black */
     --text-muted: #b0aea5;
   }
 
   html {
     background-color: var(--bg-base);
+    color-scheme: dark;
   }
 
   body {
@@ -131,8 +143,8 @@
     gap: 0.75rem;
     padding: 0.5rem 0.75rem;
     border-radius: 0.5rem;
-    color: var(--color-primary-600);
-    background-color: var(--color-primary-50);
+    color: var(--color-primary-400);
+    background-color: var(--color-primary-950);
   }
 }
 

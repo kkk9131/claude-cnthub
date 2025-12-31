@@ -44,29 +44,3 @@ export interface WorkItemListResponse {
     hasPrev: boolean;
   };
 }
-
-export interface Project {
-  projectId: string;
-  name: string;
-  path: string;
-  description?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface CreateProjectRequest {
-  name: string;
-  path: string;
-  description?: string;
-}
-
-export interface ProjectListResponse {
-  projects: Project[];
-  pagination: {
-    total: number;
-    page: number;
-    totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-  };
-}

@@ -4,10 +4,10 @@ import { useParams, useNavigate } from "react-router-dom";
 const MAX_MESSAGE_LENGTH = 10000;
 
 interface Message {
-  id: string;
-  role: "user" | "assistant";
+  messageId: string;
+  type: "user" | "assistant";
   content: string;
-  createdAt: string;
+  timestamp: string;
   error?: boolean;
 }
 
@@ -48,7 +48,7 @@ function ChatViewContent({ sessionId }: ChatViewContentProps) {
         const response = await fetch(`/api/sessions/${sessionId}/messages`);
         if (!response.ok) throw new Error("Failed to fetch messages");
         const data = await response.json();
-        setMessages(data.messages || []);
+        setMessages(data.items || []);
       } catch (err) {
         setError("Unable to load messages. Please try again.");
         console.error("Error fetching messages:", err);
@@ -96,10 +96,10 @@ function ChatViewContent({ sessionId }: ChatViewContentProps) {
       setMessages((prev) => [
         ...prev,
         {
-          id: tempId,
-          role: "user",
+          messageId: tempId,
+          type: "user",
           content: userMessage,
-          createdAt: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
         },
       ]);
 
@@ -113,14 +113,16 @@ function ChatViewContent({ sessionId }: ChatViewContentProps) {
         if (!response.ok) throw new Error("Failed to send message");
 
         const data = await response.json();
+        // APIは新しいメッセージを返す
+        const newMessage = data.message || data;
         setMessages((prev) =>
-          prev.filter((m) => m.id !== tempId).concat(data.messages)
+          prev.filter((m) => m.messageId !== tempId).concat(newMessage)
         );
       } catch (err) {
         console.error("Error sending message:", err);
         // Mark message as failed instead of removing
         setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, error: true } : m))
+          prev.map((m) => (m.messageId === tempId ? { ...m, error: true } : m))
         );
         setError("Failed to send message. Please try again.");
       } finally {
@@ -142,11 +144,11 @@ function ChatViewContent({ sessionId }: ChatViewContentProps) {
   return (
     <div className="flex flex-col h-full">
       {error && (
-        <div className="p-3 bg-red-50 border-b border-red-200 text-red-700 text-sm flex justify-between items-center">
+        <div className="p-3 bg-red-900/30 border-b border-red-800 text-red-300 text-sm flex justify-between items-center">
           <span>{error}</span>
           <button
             onClick={handleRetry}
-            className="text-red-600 hover:text-red-800 underline"
+            className="text-red-400 hover:text-red-300 underline"
           >
             Retry
           </button>
@@ -163,7 +165,7 @@ function ChatViewContent({ sessionId }: ChatViewContentProps) {
           <EmptyChat />
         ) : (
           messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble key={message.messageId} message={message} />
           ))
         )}
         <div ref={messagesEndRef} />
@@ -198,7 +200,7 @@ function ChatViewContent({ sessionId }: ChatViewContentProps) {
           </button>
         </div>
         {input.length > MAX_MESSAGE_LENGTH * 0.9 && (
-          <p id="char-count" className="text-xs text-gray-500 mt-1">
+          <p id="char-count" className="text-xs text-[var(--text-muted)] mt-1">
             {input.length}/{MAX_MESSAGE_LENGTH} characters
           </p>
         )}
@@ -214,15 +216,15 @@ interface MessageBubbleProps {
 const MessageBubble = memo(function MessageBubble({
   message,
 }: MessageBubbleProps) {
-  const isUser = message.role === "user";
+  const isUser = message.type === "user";
 
   const formattedTime = useMemo(
     () =>
-      new Date(message.createdAt).toLocaleTimeString("ja-JP", {
+      new Date(message.timestamp).toLocaleTimeString("ja-JP", {
         hour: "2-digit",
         minute: "2-digit",
       }),
-    [message.createdAt]
+    [message.timestamp]
   );
 
   return (
@@ -236,7 +238,7 @@ const MessageBubble = memo(function MessageBubble({
           max-w-[80%] rounded-2xl px-4 py-3
           ${
             message.error
-              ? "bg-red-100 border border-red-300 text-red-800 rounded-br-md"
+              ? "bg-red-900/30 border border-red-700 text-red-300 rounded-br-md"
               : isUser
                 ? "bg-primary-500 text-white rounded-br-md"
                 : "bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-bl-md"
@@ -252,7 +254,7 @@ const MessageBubble = memo(function MessageBubble({
         <span
           className={`
             text-xs mt-1 block
-            ${message.error ? "text-red-600" : isUser ? "text-primary-100" : "text-[var(--text-muted)]"}
+            ${message.error ? "text-red-400" : isUser ? "text-primary-200" : "text-[var(--text-muted)]"}
           `}
         >
           {formattedTime}
