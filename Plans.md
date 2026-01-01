@@ -111,7 +111,17 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 | I-03 | 新セッション ID 体系 (`ch_ss_0001`) | I-01 | `feature/new-session-id` | `cc:完了` |
 | I-04 | ローカル Embedding フォールバック | - | `feature/local-embedding` | `cc:完了` |
 
-### 1-E: CLI (補助)
+### 1-E: UI 統合
+
+> G-01〜G-04 で作成したコンポーネントを実際の画面に統合
+
+| ID | タスク | 依存 | ブランチ | 状態 |
+|----|--------|------|---------|------|
+| UI-01 | TreeView を SessionList に統合 | G-01 | `feature/ui-treeview-integration` | `cc:TODO` |
+| UI-02 | ProjectSwitcher を Sidebar に統合 | G-04 | `feature/ui-project-switcher` | `cc:TODO` |
+| UI-03 | DnD + MergeUI をセッション画面に統合 | G-02, G-03 | `feature/ui-dnd-merge` | `cc:TODO` |
+
+### 1-F: CLI (補助)
 
 | ID | タスク | 依存 | ブランチ |
 |----|--------|------|---------|
@@ -155,19 +165,9 @@ Claude Code Plugin として動作し、セッション永続化・コンテキ�
 
 ## 次の優先タスク
 
-1. ~~**I-01** - サーバー統合 (Port 3048)~~ ✅ 完了
-2. ~~**P-01** - Project 型定義・DB スキーマ~~ ✅ 完了
-3. ~~**G-01** - ツリービューコンポーネント~~ ✅ 完了
-4. ~~**I-03** - 新セッション ID 体系 (`ch_ss_0001`)~~ ✅ 完了
-5. ~~**P-02** - プロジェクト CRUD API~~ ✅ 完了
-6. ~~**G-02** - ドラッグ&ドロップ基盤 (dnd-kit)~~ ✅ 完了
-7. ~~**S-01** - cnthub:add Skill 定義~~ ✅ 完了
-8. ~~**G-03** - マージ操作 UI~~ ✅ 完了
-9. ~~**G-04** - プロジェクト切替 UI~~ ✅ 完了
-10. ~~**S-02** - cnthub:search Skill 定義~~ ✅ 完了
-11. ~~**S-03** - cnthub:gui Skill 定義~~ ✅ 完了
-12. ~~**I-02** - Memory API シンプル化~~ ✅ 完了
-13. ~~**P-03** - セッション→プロジェクト自動紐付け~~ ✅ 完了
+1. **UI-01** - TreeView を SessionList に統合
+2. **UI-02** - ProjectSwitcher を Sidebar に統合
+3. **UI-03** - DnD + MergeUI をセッション画面に統合
 
 > 詳細なタスクチケットは [TASKS.md](./TASKS.md) を参照
 
