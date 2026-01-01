@@ -4,33 +4,35 @@ Claude Code のセッション管理・AI メモリプラグイン。
 
 ## インストール
 
-### 方法 1: 開発モードでテスト
+### ローカル開発（推奨）
 
 ```bash
-# プラグインディレクトリを指定して Claude Code を起動
-claude --plugin-dir /path/to/claude-cnthub
+# プロジェクトディレクトリで Claude Code を起動
+cd /Users/kazuto/Desktop/claude-cnthub
+claude --plugin-dir ./plugin
 ```
 
-### 方法 2: ローカルプラグインとして登録
+**メリット**:
+- マーケットプレイス登録不要
+- プラグインの変更が再起動で即反映
+- プライベートリポジトリでも動作
 
+### 公開マーケットプレイス（将来）
+
+リポジトリを公開後：
 ```bash
-# シンボリックリンクを作成
-mkdir -p ~/.claude/plugins/local
-ln -s /path/to/claude-cnthub ~/.claude/plugins/local/claude-cnthub
-```
+# マーケットプレイスを追加
+claude plugin marketplace add https://github.com/kkk9131/claude-cnthub.git
 
-### 方法 3: 将来的な公開版
-
-```bash
-# Registry 経由でインストール（将来対応）
-claude plugin install claude-cnthub
+# プラグインをインストール
+claude plugin install claude-cnthub@claude-cnthub-marketplace
 ```
 
 ## 必要条件
 
 1. **API サーバーが起動していること**
    ```bash
-   cd /path/to/claude-cnthub
+   cd /Users/kazuto/Desktop/claude-cnthub
    bun run dev:api
    ```
 
@@ -51,8 +53,8 @@ claude plugin install claude-cnthub
 | ツール | 説明 |
 |--------|------|
 | search | セマンティック検索でセッションを検索 |
-| list_sessions | セッション一覧を取得 (Level 0) |
-| get_session | セッション詳細を取得 (Level 1) |
+| list_sessions | セッション一覧を取得 |
+| get_session | セッション詳細を取得 |
 | inject_context | 過去セッションのコンテキストを注入 |
 
 ## 設定
@@ -60,7 +62,7 @@ claude plugin install claude-cnthub
 環境変数（オプション）:
 
 ```bash
-CNTHUB_API_URL=http://localhost:3048  # API サーバーのURL（デフォルト: localhost:3048）
+CNTHUB_API_URL=http://localhost:3048  # API サーバーのURL（デフォルト）
 ```
 
 ## ファイル構成
@@ -68,28 +70,47 @@ CNTHUB_API_URL=http://localhost:3048  # API サーバーのURL（デフォルト
 ```
 claude-cnthub/
 ├── .claude-plugin/
-│   └── plugin.json          # プラグインマニフェスト
-├── .mcp.json                 # MCP サーバー設定
-├── hooks/
-│   └── hooks.json            # Hook イベント定義
-└── scripts/
-    ├── mcp-server.js         # MCP サーバー
-    ├── session-start-hook.js # セッション開始 Hook
-    ├── session-stop-hook.js  # セッション停止 Hook
-    └── session-end-hook.js   # セッション終了 Hook
+│   └── marketplace.json      # マーケットプレイス設定
+├── plugin/                   # プラグイン本体
+│   ├── .claude-plugin/
+│   │   └── plugin.json       # プラグインマニフェスト
+│   ├── hooks/
+│   │   └── hooks.json        # Hook イベント定義
+│   └── scripts/
+│       ├── mcp-server.js         # MCP サーバー
+│       ├── hook-utils.js         # 共通ユーティリティ
+│       ├── session-start-hook.js # セッション開始 Hook
+│       ├── session-stop-hook.js  # セッション停止 Hook
+│       └── session-end-hook.js   # セッション終了 Hook
+└── packages/
+    └── api/                  # Backend API サーバー
 ```
 
 ## デバッグ
 
 ```bash
 # 詳細ログを有効にして起動
-claude --debug --plugin-dir /path/to/claude-cnthub
+claude --debug --plugin-dir ./plugin
 
 # Hook の実行結果を確認（Claude Code 内で Ctrl+O）
 ```
 
 ## トラブルシューティング
 
-- **Hook が実行されない**: スクリプトに実行権限があるか確認 (`chmod +x scripts/*.js`)
-- **API 接続エラー**: `bun run dev:api` でサーバーが起動しているか確認
-- **MCP ツールが表示されない**: Claude Code を再起動して MCP サーバーを再読み込み
+### よくあるエラー
+
+| エラー | 解決策 |
+|--------|--------|
+| `Plugin not found in marketplace 'inline'` | `~/.claude/settings.json` から該当エントリを削除 |
+| `SSH authentication failed` | HTTPS URL を使用するか、リポジトリを公開 |
+| `Marketplace file not found` | `--plugin-dir` でローカル開発モードを使用 |
+| Hook が実行されない | `chmod +x plugin/scripts/*.js` で実行権限を付与 |
+| API 接続エラー | `bun run dev:api` でサーバーを起動 |
+
+### 設定ファイルの場所
+
+| ファイル | 用途 |
+|----------|------|
+| `~/.claude/settings.json` | グローバル設定・有効プラグイン |
+| `~/.claude/plugins/known_marketplaces.json` | 登録済みマーケットプレイス |
+| `~/.claude/plugins/installed_plugins.json` | インストール済みプラグイン |
