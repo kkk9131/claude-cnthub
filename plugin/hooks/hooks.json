@@ -12,17 +12,6 @@
         ]
       }
     ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-stop-hook.js\"",
-            "timeout": 30000
-          }
-        ]
-      }
-    ],
     "SessionEnd": [
       {
         "hooks": [

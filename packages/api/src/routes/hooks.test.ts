@@ -84,7 +84,7 @@ describe("Hook API", () => {
     });
 
     it("エラーレスポンスにsessionIdを含めない", async () => {
-      const res = await request("POST", "/hook/session-stop", {
+      const res = await request("POST", "/hook/session-end", {
         sessionId: "non-existent-session",
       });
 
@@ -148,69 +148,6 @@ describe("Hook API", () => {
     it("長すぎるsessionIdを拒否する", async () => {
       const res = await request("POST", "/hook/session-start", {
         sessionId: "a".repeat(300), // 256文字超
-      });
-
-      expect(res.status).toBe(400);
-    });
-  });
-
-  // ==================== POST /hook/session-stop ====================
-  describe("POST /hook/session-stop", () => {
-    it("存在しないセッションで404を返す", async () => {
-      const res = await request("POST", "/hook/session-stop", {
-        sessionId: "non-existent",
-      });
-
-      expect(res.status).toBe(404);
-    });
-
-    it("トランスクリプトなしでも正常に処理できる", async () => {
-      const session = createSession({
-        name: "Test Session",
-        workingDir: "/tmp/test",
-      });
-
-      const res = await request("POST", "/hook/session-stop", {
-        sessionId: session.sessionId,
-      });
-
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.sessionId).toBe(session.sessionId);
-      expect(json.summary).toBeNull();
-    });
-
-    it("トランスクリプトから要約を生成できる", { timeout: 30000 }, async () => {
-      const session = createSession({
-        name: "Test Session",
-        workingDir: "/tmp/test",
-      });
-
-      const res = await request("POST", "/hook/session-stop", {
-        sessionId: session.sessionId,
-        transcript: [
-          { role: "user", content: "Hello, please help me with coding." },
-          {
-            role: "assistant",
-            content: "Of course! What would you like to work on?",
-          },
-        ],
-      });
-
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.sessionId).toBe(session.sessionId);
-      // レスポンスにsummaryフィールドが存在する（null含む）
-      expect("summary" in json).toBe(true);
-      expect("detailedSummary" in json).toBe(true);
-    });
-
-    it("不正なトランスクリプト形式を拒否する", async () => {
-      const res = await request("POST", "/hook/session-stop", {
-        sessionId: "test-session",
-        transcript: [
-          { role: "invalid-role", content: "test" }, // 不正なrole
-        ],
       });
 
       expect(res.status).toBe(400);

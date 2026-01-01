@@ -1,355 +1,341 @@
 # TASKS.md - 並列実装タスク一覧
 
 > git worktree による並列開発用タスクチケット
-> 最終更新: 2025-12-31
+> 最終更新: 2026-01-02
+> 要件定義: [07-plugin-requirements.md](./Agent-docs/07-plugin-requirements.md)
 
 ## クイックスタート
 
 ```bash
 # 1. ブランチ作成
-git branch feature/unified-server
-git branch feature/new-session-id
-git branch feature/project-schema
+git branch feature/posttooluse-hook
+git branch feature/sessionend-summary
+git branch feature/cmd-get
 
 # 2. worktree 作成（別ディレクトリで並列作業）
-git worktree add ../cnthub-server feature/unified-server
-git worktree add ../cnthub-session-id feature/new-session-id
-git worktree add ../cnthub-project feature/project-schema
+git worktree add ../cnthub-posttooluse feature/posttooluse-hook
+git worktree add ../cnthub-sessionend feature/sessionend-summary
+git worktree add ../cnthub-cmd-get feature/cmd-get
 
 # 3. 各 worktree で作業
-cd ../cnthub-server && bun install
-cd ../cnthub-session-id && bun install
-cd ../cnthub-project && bun install
+cd ../cnthub-posttooluse && bun install
+cd ../cnthub-sessionend && bun install
+cd ../cnthub-cmd-get && bun install
 ```
 
 ---
 
-## Phase 1: Claude Code Plugin
+## 完了済み
 
-### 🔴 Group A: 基盤（依存なし・即時着手可）
+<details>
+<summary>完了済みタスク（クリックで展開）</summary>
 
-#### I-01: サーバー統合
+### 基盤・コア機能 ✅
+- [x] I-01: サーバー統合 (Port 3048)
+- [x] I-02: Memory API シンプル化
+- [x] I-03: 新セッション ID 体系 (`ch_ss_0001`)
+- [x] I-04: ローカル Embedding フォールバック
+- [x] P-01: Project 型定義・DB スキーマ
+- [x] P-02: プロジェクト CRUD API
+- [x] P-03: セッション→プロジェクト自動紐付け
+
+</details>
+
+---
+
+## Phase 1: Plugin 機能実装 `現在`
+
+### 🔴 1-A: Hook 実装（高優先度・依存なし）
+
+#### H-01: PostToolUse Hook（リアルタイム観測記録）
 
 | 項目 | 内容 |
 |------|------|
-| ブランチ | `feature/unified-server` |
-| 見積もり | 3h |
+| ブランチ | `feature/posttooluse-hook` |
+| 依存 | なし |
+| 要件ID | R-02 |
 
 **実装内容:**
 ```
-packages/api/src/
-├── index.ts           # Port 3048 で統合起動
-├── routes/
-│   ├── sessions.ts    # 既存
-│   ├── memories.ts    # 新規 (シンプル API)
-│   ├── hooks.ts       # Hook 受信
-│   └── merges.ts      # 既存
+plugin/scripts/post-tooluse-hook.js  # 新規作成
+plugin/hooks/hooks.json              # PostToolUse 追加
+packages/api/src/routes/hooks.ts     # POST /hook/post-tooluse
 ```
 
 **完了条件:**
-- [ ] Port 3048 で統合サーバー起動
-- [ ] `/hook/*` エンドポイント動作
-- [ ] `/memories/*` エンドポイント動作
-- [ ] 既存テスト通過
+- [ ] PostToolUse Hook スクリプト作成
+- [ ] hooks.json に PostToolUse 設定追加
+- [ ] observations テーブルに記録
 
 ---
 
-#### I-03: 新セッション ID 体系
+#### H-02: SessionEnd 要約→タイトル→Embedding 連鎖生成
 
 | 項目 | 内容 |
 |------|------|
-| ブランチ | `feature/new-session-id` |
-| 見積もり | 2h |
-
-**ID 形式:**
-```typescript
-ch_ss_0001  // セッション
-ch_mg_0001  // マージ
-ch_pj_0001  // プロジェクト
-ch_ob_0001  // 観測記録
-```
+| ブランチ | `feature/sessionend-summary` |
+| 依存 | なし |
+| 要件ID | R-01, R-04, R-05 |
 
 **実装内容:**
-```typescript
-// packages/api/src/utils/id-generator.ts
-export function generateId(type: 'ss' | 'mg' | 'pj' | 'ob'): string {
-  const count = getNextSequence(type);
-  return `ch_${type}_${count.toString().padStart(4, '0')}`;
-}
+```
+plugin/scripts/session-end-hook.js   # 拡張
+packages/api/src/routes/hooks.ts     # session-end 処理追加
+packages/api/src/services/           # 要約・タイトル・Embedding連鎖
 ```
 
 **完了条件:**
-- [ ] ID 生成ユーティリティ実装
-- [ ] sessions テーブルのカラム変更
-- [ ] マイグレーション作成
-- [ ] 既存テスト更新
+- [ ] トランスクリプト読み込み
+- [ ] Claude AI で要約 + タイトル生成
+- [ ] Transformers.js で Embedding 生成
+- [ ] DB 保存（summaries, embeddings）
 
 ---
 
-#### P-01: Project 型定義・DB スキーマ
+#### H-03: SessionStart コンテキスト注入
 
 | 項目 | 内容 |
 |------|------|
-| ブランチ | `feature/project-schema` |
-| 見積もり | 2h |
+| ブランチ | `feature/sessionstart-inject` |
+| 依存 | H-02 |
+| 要件ID | R-07 |
 
-**型定義:**
-```typescript
-// packages/shared/src/types/project.ts
-export interface Project {
-  id: string;           // ch_pj_0001
-  name: string;
-  path: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+**実装内容:**
 ```
-
-**DB スキーマ:**
-```sql
-CREATE TABLE projects (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  path TEXT UNIQUE NOT NULL,
-  description TEXT,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
-ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id);
+plugin/scripts/session-start-hook.js  # 拡張
+packages/api/src/routes/hooks.ts      # 関連セッション検索
 ```
 
 **完了条件:**
-- [ ] 型定義完了
-- [ ] マイグレーション作成
-- [ ] sessions との関連付け
+- [ ] sqlite-vec でベクトル検索
+- [ ] 関連セッション要約を stdout に出力
+- [ ] Claude に自動注入
 
 ---
 
-#### S-01: cnthub:add Skill 定義
+### 🟡 1-B: スラッシュコマンド（高優先度）
+
+#### CMD-01: /cnthub:get - 過去セッション取得
 
 | 項目 | 内容 |
 |------|------|
-| ブランチ | `feature/skill-add` |
-| 見積もり | 1h |
+| ブランチ | `feature/cmd-get` |
+| 依存 | なし |
+| 要件ID | R-08 |
 
-**Skill ファイル:**
+**実装内容:**
 ```
-packages/plugin/skills/cnthub-add/SKILL.md
+plugin/commands/cnthub-get.md        # コマンド定義
+packages/api/src/routes/commands.ts  # コマンド用 API（任意）
+```
+
+**フロー:**
+```
+1. セッション一覧をリスト表示（プロジェクト/日付フィルタ）
+2. ユーザーが選択
+3. 選択セッションの要約をコンテキストに注入
 ```
 
 **完了条件:**
-- [ ] SKILL.md 作成
-- [ ] トリガー条件定義
-- [ ] Worker API 呼び出し例記載
+- [ ] コマンド定義ファイル作成
+- [ ] セッション一覧取得ロジック
+- [ ] 選択 UI（リストベース）
+- [ ] コンテキスト注入
 
 ---
 
-#### G-01: ツリービューコンポーネント
+#### CMD-02: /cnthub:export - 現在セッション書き出し
 
 | 項目 | 内容 |
 |------|------|
-| ブランチ | `feature/tree-view` |
-| 見積もり | 4h |
+| ブランチ | `feature/cmd-export` |
+| 依存 | H-01（PostToolUse で観測データが必要） |
+| 要件ID | R-09 |
 
-**コンポーネント:**
+**実装内容:**
 ```
-packages/web/src/components/TreeView/
-├── TreeView.tsx
-├── TreeNode.tsx
-├── TreeBranch.tsx
-└── types.ts
+plugin/commands/cnthub-export.md     # コマンド定義
+packages/api/src/routes/commands.ts  # エクスポート API
+```
+
+**フロー:**
+```
+1. 現在セッションの観測記録（observations）を取得
+2. AI がグループ分け案を提示
+3. ユーザーが選択
+4. 選択グループを要約→Embedding→DB保存
 ```
 
 **完了条件:**
-- [ ] 基本コンポーネント実装
-- [ ] 展開/折りたたみ動作
-- [ ] ダークモードスタイリング
+- [ ] コマンド定義ファイル作成
+- [ ] 観測記録取得ロジック
+- [ ] AI グループ分け
+- [ ] 選択→要約→保存フロー
 
 ---
 
-#### C-01: CLI パッケージ初期化
+### 🟢 1-C: Viewer UI（中優先度）
+
+#### V-01: Viewer UI 基盤
 
 | 項目 | 内容 |
 |------|------|
-| ブランチ | `feature/cli-init` |
-| 見積もり | 2h |
+| ブランチ | `feature/viewer-base` |
+| 依存 | なし |
+| 要件ID | R-10 |
 
-**構成:**
+**実装内容:**
 ```
-packages/cli/
-├── package.json
-├── tsconfig.json
+plugin/ui/                           # packages/web/ から移行
 ├── src/
-│   ├── index.ts
-│   └── commands/
-└── bin/cnthub
+│   ├── App.tsx
+│   ├── components/
+│   └── pages/
+└── package.json
 ```
 
 **完了条件:**
-- [ ] パッケージ初期化
-- [ ] `cnthub --help` 動作
-- [ ] モノレポに統合
+- [ ] packages/web/ を plugin/ui/ に移行
+- [ ] localhost:3048/viewer でアクセス可能
+- [ ] 基本レイアウト（サイドバー + メインエリア）
 
 ---
 
-### 🟡 Group B: コア機能（Group A 依存）
-
-| ID | タスク | 依存 | 見積もり |
-|----|--------|------|---------|
-| I-02 | Memory API シンプル化 | I-01 | 3h |
-| P-02 | プロジェクト CRUD API | P-01 | 3h |
-| P-03 | セッション→プロジェクト自動紐付け | P-01 | 2h |
-| S-02 | cnthub:search Skill 定義 | S-01 | 1h |
-| S-03 | cnthub:gui Skill 定義 | S-01 | 1h |
-| G-02 | ドラッグ&ドロップ基盤 | G-01 | 4h |
-| C-02 | `cnthub list` | C-01 | 2h |
-| C-03 | `cnthub search` | C-01 | 2h |
-
----
-
-### 🟢 Group C: 統合機能（Group B 依存）
-
-| ID | タスク | 依存 | 見積もり |
-|----|--------|------|---------|
-| G-03 | マージ操作 UI | G-02 | 4h |
-| G-04 | プロジェクト切替 UI | P-02 | 2h |
-| C-04 | `cnthub merge` | C-01 | 2h |
-
----
-
-### 🟠 Group C2: UI 統合（コンポーネント → 画面）
-
-> G-01〜G-04 で作成したコンポーネントを実際の画面に統合
-
-#### UI-01: TreeView を SessionList に統合
+#### V-02: セッション一覧（プロジェクト切替）
 
 | 項目 | 内容 |
 |------|------|
-| ブランチ | `feature/ui-treeview-integration` |
-| 依存 | G-01 |
-| 見積もり | 2h |
+| ブランチ | `feature/viewer-sidebar` |
+| 依存 | V-01 |
+| 要件ID | R-11 |
 
 **実装内容:**
 ```
-packages/web/src/components/SessionList.tsx
-  - SessionCard → TreeView に置き換え
-  - セッションをツリー構造で表示
-  - 展開/折りたたみ動作
+plugin/ui/src/components/
+├── Sidebar/
+│   ├── SessionList.tsx
+│   └── ProjectSwitcher.tsx
 ```
 
 **完了条件:**
-- [ ] SessionList が TreeView を使用
-- [ ] セッションがツリー形式で表示
-- [ ] 展開/折りたたみが動作
+- [ ] IDE風サイドバー
+- [ ] プロジェクト切替ドロップダウン
+- [ ] セッション一覧（日付グループ化）
 
 ---
 
-#### UI-02: ProjectSwitcher を Sidebar に統合
+#### V-03: ノードエディタ（get/export 操作）
 
 | 項目 | 内容 |
 |------|------|
-| ブランチ | `feature/ui-project-switcher` |
-| 依存 | G-04 |
-| 見積もり | 1h |
+| ブランチ | `feature/viewer-node-editor` |
+| 依存 | V-01, V-02 |
+| 要件ID | R-12 |
 
 **実装内容:**
 ```
-packages/web/src/components/Sidebar.tsx
-  - ProjectSwitcher コンポーネントを追加
-  - プロジェクト一覧表示
-  - 切替機能
+plugin/ui/src/components/
+├── NodeEditor/
+│   ├── NodeEditor.tsx      # React Flow ベース
+│   ├── SessionNode.tsx
+│   └── ConnectionLine.tsx
 ```
 
 **完了条件:**
-- [ ] Sidebar に ProjectSwitcher 表示
-- [ ] プロジェクト一覧が表示される
-- [ ] プロジェクト切替が動作
+- [ ] React Flow でノードエディタ
+- [ ] 中央に現在セッション
+- [ ] D&D で接続 = get 操作
+- [ ] 接続削除 = export 操作
 
 ---
 
-#### UI-03: DnD + MergeUI をセッション画面に統合
+## 削除予定
 
-| 項目 | 内容 |
-|------|------|
-| ブランチ | `feature/ui-dnd-merge` |
-| 依存 | G-02, G-03 |
-| 見積もり | 3h |
+<details>
+<summary>不要になったタスク（クリックで展開）</summary>
 
-**実装内容:**
-```
-packages/web/src/
-├── App.tsx              # DnDProvider でラップ
-├── components/
-│   ├── SessionList.tsx  # DraggableItem 適用
-│   └── Sidebar.tsx      # DroppableZone 追加（マージエリア）
-```
+以下は要件再定義により不要になったタスク:
 
-**完了条件:**
-- [ ] セッションをドラッグ可能
-- [ ] ドロップターゲットがハイライト
-- [ ] マージ操作 UI が表示される
+### 旧 GUI コンポーネント (G-01〜04)
+> Viewer UI で React Flow ベースに再実装するため不要
 
----
+- ~~G-01: ツリービューコンポーネント~~
+- ~~G-02: ドラッグ&ドロップ基盤~~
+- ~~G-03: マージ操作 UI~~
+- ~~G-04: プロジェクト切替 UI~~
 
-## Phase 2: Cross-LLM 連携
+### 旧 Skills (S-01〜03)
+> CMD-01, CMD-02 に置き換え
 
-### 🔵 Group D: Profile System
+- ~~S-01: cnthub:add Skill 定義~~
+- ~~S-02: cnthub:search Skill 定義~~
+- ~~S-03: cnthub:gui Skill 定義~~
 
-| ID | タスク | 依存 | 見積もり |
-|----|--------|------|---------|
-| PF-01 | project_profiles テーブル | P-01 | 2h |
-| PF-02 | Static/Dynamic Facts API | PF-01 | 3h |
-| PF-03 | Dynamic Facts 自動更新 | PF-02 | 2h |
+### CLI (C-01〜04)
+> Plugin 動作に不要、将来の拡張として保留
 
----
+- ~~C-01: CLI パッケージ初期化~~
+- ~~C-02: `cnthub list`~~
+- ~~C-03: `cnthub search`~~
+- ~~C-04: `cnthub merge`~~
 
-### 🟣 Group E: LLM 接続
+### 旧 UI 統合タスク (UI-01〜03)
+> packages/web/ を plugin/ui/ に統合するため不要
 
-| ID | タスク | 依存 | 見積もり |
-|----|--------|------|---------|
-| L-01 | LLM 接続設定 DB スキーマ | - | 2h |
-| L-02 | ChatGPT Adapter | L-01 | 4h |
-| L-03 | Codex Adapter | L-01 | 3h |
-| L-04 | 接続管理 API | L-01 | 3h |
+- ~~UI-01: TreeView を SessionList に統合~~
+- ~~UI-02: ProjectSwitcher を Sidebar に統合~~
+- ~~UI-03: DnD + MergeUI をセッション画面に統合~~
+
+</details>
 
 ---
 
-### ⚪ Group F: コンテキスト転送 UI
+## Phase 2: Cross-LLM 連携 `将来`
 
-| ID | タスク | 依存 | 見積もり |
-|----|--------|------|---------|
-| T-01 | LLM 接続管理ページ | L-04 | 4h |
-| T-02 | コンテキスト転送ページ | T-01, PF-02 | 5h |
-| T-03 | コンテキストプレビュー・編集 | T-02 | 3h |
+<details>
+<summary>Phase 2 タスク（クリックで展開）</summary>
+
+### Profile System
+| ID | タスク | 依存 |
+|----|--------|------|
+| PF-01 | project_profiles テーブル | P-01 |
+| PF-02 | Static/Dynamic Facts API | PF-01 |
+| PF-03 | Dynamic Facts 自動更新 | PF-02 |
+
+### LLM 接続
+| ID | タスク | 依存 |
+|----|--------|------|
+| L-01 | LLM 接続設定 DB スキーマ | - |
+| L-02 | ChatGPT Adapter | L-01 |
+| L-03 | Codex Adapter | L-01 |
+| L-04 | 接続管理 API | L-01 |
+
+### コンテキスト転送 UI
+| ID | タスク | 依存 |
+|----|--------|------|
+| T-01 | LLM 接続管理ページ | L-04 |
+| T-02 | コンテキスト転送ページ | T-01, PF-02 |
+| T-03 | コンテキストプレビュー・編集 | T-02 |
+
+</details>
 
 ---
 
 ## 進捗トラッキング
 
 ```
-Phase 1: Claude Code Plugin
+Phase 1: Plugin 機能実装
 ─────────────────────────────────────────
-Group A (基盤):     ██████████ 6/6 ✅
-Group B (コア):     ██████████ 8/8 ✅
-Group C (統合):     ██████░░░░ 2/3
-Group C2 (UI統合):  ░░░░░░░░░░ 0/3
+1-A Hook 実装:     ░░░░░░░░░░ 0/3
+1-B スラッシュコマンド: ░░░░░░░░░░ 0/2
+1-C Viewer UI:     ░░░░░░░░░░ 0/3
 ─────────────────────────────────────────
-Phase 1 Total:      ████████░░ 16/20
-
-Phase 2: Cross-LLM 連携
-─────────────────────────────────────────
-Group D (Profile):  ░░░░░░░░░░ 0/3
-Group E (LLM):      ░░░░░░░░░░ 0/4
-Group F (転送UI):   ░░░░░░░░░░ 0/3
-─────────────────────────────────────────
-Phase 2 Total:      ░░░░░░░░░░ 0/10
-
-Overall:            ████████░░ 16/30
+Phase 1 Total:     ░░░░░░░░░░ 0/8
 
 # 次の優先タスク
-1. UI-01 - TreeView を SessionList に統合
-2. UI-02 - ProjectSwitcher を Sidebar に統合
-3. UI-03 - DnD + MergeUI をセッション画面に統合
+1. H-01 - PostToolUse Hook（リアルタイム観測記録）
+2. H-02 - SessionEnd 要約→タイトル→Embedding 連鎖生成
+3. H-03 - SessionStart コンテキスト注入
+4. CMD-01 - /cnthub:get コマンド
+5. CMD-02 - /cnthub:export コマンド
 ```
