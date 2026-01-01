@@ -13,7 +13,7 @@
 const readline = require("readline");
 const path = require("path");
 
-const API_URL = process.env.CNTHUB_API_URL || "http://localhost:3001";
+const API_URL = process.env.CNTHUB_API_URL || "http://localhost:3048";
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.dirname(__dirname);
 const FETCH_TIMEOUT = 10000; // 10秒
 
@@ -280,7 +280,9 @@ async function searchSessions({ query, limit = 10 }) {
     throw new Error(`Search failed: ${response.status}`);
   }
 
-  return await response.json();
+  const data = await response.json();
+  // Handle paginated response: { items: [...], pagination: {...} }
+  return Array.isArray(data) ? data : (data.items || data.results || []);
 }
 
 /**
@@ -300,7 +302,10 @@ async function listSessions({ status, projectId, limit = 20 }) {
     throw new Error(`List sessions failed: ${response.status}`);
   }
 
-  const sessions = await response.json();
+  const data = await response.json();
+  
+  // Handle paginated response: { items: [...], pagination: {...} }
+  const sessions = Array.isArray(data) ? data : (data.items || []);
 
   // Return Level 0 index (lightweight)
   return sessions.map((s) => ({
