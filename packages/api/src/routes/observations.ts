@@ -18,7 +18,12 @@ import {
   getObservationById,
   type ObservationType,
 } from "../repositories/observation";
-import { getSessionById, createSession } from "../repositories/session";
+import {
+  getSessionById,
+  createSession,
+  updateSession,
+} from "../repositories/session";
+import { createSummary } from "../repositories/summary";
 import { generateSummary } from "../services/summarizer";
 import { hookLogger as log } from "../utils/logger";
 import type { Message } from "@claude-cnthub/shared";
@@ -257,6 +262,52 @@ observationsRouter.post(
       // 要約を生成
       const summary = await generateSummary(newSession.sessionId, messages);
 
+      // 要約を summaries テーブルに保存
+      createSummary({
+        sessionId: newSession.sessionId,
+        shortSummary: summary.shortSummary,
+        detailedSummary: summary.detailedSummary,
+        keyDecisions: summary.keyDecisions,
+        filesModified: summary.filesModified,
+        toolsUsed: summary.toolsUsed,
+        topics: summary.topics,
+        originalTokenCount: summary.originalTokenCount,
+        summaryTokenCount: summary.summaryTokenCount,
+        compressionRatio: summary.compressionRatio,
+      });
+
+      // 要約を observation として新セッションに保存（トークン数計算用）
+      const summaryContent = [
+        `## 短い要約\n${summary.shortSummary}`,
+        `\n## 詳細な要約\n${summary.detailedSummary}`,
+        summary.keyDecisions.length > 0
+          ? `\n## 重要な決定事項\n${summary.keyDecisions.map((d) => `- ${d}`).join("\n")}`
+          : "",
+        summary.filesModified.length > 0
+          ? `\n## 変更ファイル\n${summary.filesModified.map((f) => `- ${f}`).join("\n")}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      createObservation({
+        sessionId: newSession.sessionId,
+        type: "note",
+        title: `Export Summary (${summary.originalTokenCount} → ${summary.summaryTokenCount} tokens)`,
+        content: summaryContent,
+        metadata: {
+          originalTokenCount: summary.originalTokenCount,
+          summaryTokenCount: summary.summaryTokenCount,
+          compressionRatio: summary.compressionRatio,
+          toolsUsed: summary.toolsUsed,
+          topics: summary.topics,
+        },
+      });
+
+      // Export したセッションは completed に設定
+      updateSession(newSession.sessionId, { status: "completed" });
+      newSession.status = "completed";
+
       return c.json(
         {
           session: newSession,
@@ -265,6 +316,7 @@ observationsRouter.post(
             detailedSummary: summary.detailedSummary,
             keyDecisions: summary.keyDecisions,
           },
+          observations: [{ type: "note", title: "Export Summary" }],
           observationCount: selectedObservations.length,
         },
         201

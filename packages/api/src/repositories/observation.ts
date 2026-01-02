@@ -287,3 +287,80 @@ export function deleteObservation(observationId: string): boolean {
     );
   }
 }
+
+/**
+ * テキストのトークン数を推定（日本語/英語混合対応）
+ */
+function estimateTokens(text: string): number {
+  if (!text) return 0;
+
+  const japaneseChars = text.match(/[\u3000-\u9fff]/g) || [];
+  const otherChars = text.length - japaneseChars.length;
+
+  // 日本語: 1.5文字/トークン, 英語: 4文字/トークン
+  const japaneseTokens = japaneseChars.length / 1.5;
+  const otherTokens = otherChars / 4;
+
+  return Math.ceil(japaneseTokens + otherTokens);
+}
+
+/**
+ * セッションの総トークン数を取得
+ */
+export function getSessionTokenCount(sessionId: string): number {
+  try {
+    const rows = query<{ title: string; content: string }>(
+      "SELECT title, content FROM observations WHERE session_id = ?",
+      sessionId
+    );
+
+    return rows.reduce((total, row) => {
+      return total + estimateTokens(row.title) + estimateTokens(row.content);
+    }, 0);
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to get session token count: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
+ * 複数セッションのトークン数を一括取得
+ */
+export function getSessionsTokenCounts(
+  sessionIds: string[]
+): Map<string, number> {
+  if (sessionIds.length === 0) return new Map();
+
+  try {
+    const placeholders = sessionIds.map(() => "?").join(",");
+    const rows = query<{ session_id: string; title: string; content: string }>(
+      `SELECT session_id, title, content FROM observations WHERE session_id IN (${placeholders})`,
+      ...sessionIds
+    );
+
+    const tokenMap = new Map<string, number>();
+
+    // 初期化
+    for (const id of sessionIds) {
+      tokenMap.set(id, 0);
+    }
+
+    // 計算
+    for (const row of rows) {
+      const current = tokenMap.get(row.session_id) || 0;
+      const tokens = estimateTokens(row.title) + estimateTokens(row.content);
+      tokenMap.set(row.session_id, current + tokens);
+    }
+
+    return tokenMap;
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to get sessions token counts: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}

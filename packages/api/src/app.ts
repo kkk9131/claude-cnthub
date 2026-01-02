@@ -4,8 +4,11 @@
  * index.ts からインポートされる共通のアプリケーションインスタンス
  */
 
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { serveStatic } from "hono/bun";
 
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { logger } from "./middleware/logger";
@@ -16,6 +19,9 @@ import { hooksRouter } from "./routes/hooks";
 import { mergesRouter } from "./routes/merges";
 import { memoriesRouter, legacyMemoriesRouter } from "./routes/memories";
 import { projectsRouter } from "./routes/projects";
+
+// Viewer UI の静的ファイルパスを解決
+const VIEWER_UI_PATH = resolve(join(__dirname, "../../../plugin/ui"));
 
 /**
  * アプリケーションを作成（テスト用にファクトリ関数として提供）
@@ -71,6 +77,41 @@ export function createApp(): Hono {
 
   // Projects API（プロジェクト管理）
   newApp.route("/api/projects", projectsRouter);
+
+  // Viewer UI 静的配信 (R-10)
+  // /viewer/* で plugin/ui/ の静的ファイルを配信
+  if (existsSync(VIEWER_UI_PATH)) {
+    // アセットファイル配信 (/viewer/assets/*)
+    newApp.use(
+      "/viewer/assets/*",
+      serveStatic({
+        root: VIEWER_UI_PATH,
+        rewriteRequestPath: (path) => path.replace(/^\/viewer/, ""),
+      })
+    );
+
+    // index.html へのフォールバック（SPA対応）
+    newApp.get("/viewer", (c) => {
+      return c.redirect("/viewer/");
+    });
+
+    newApp.get("/viewer/*", async (c) => {
+      const indexPath = join(VIEWER_UI_PATH, "index.html");
+      // パストラバーサル対策: VIEWER_UI_PATH 配下であることを確認
+      const normalizedPath = resolve(indexPath);
+      if (!normalizedPath.startsWith(resolve(VIEWER_UI_PATH))) {
+        return c.notFound();
+      }
+
+      if (existsSync(normalizedPath)) {
+        const file = Bun.file(normalizedPath);
+        return new Response(file, {
+          headers: { "Content-Type": "text/html" },
+        });
+      }
+      return c.notFound();
+    });
+  }
 
   // 404 ハンドラ
   newApp.notFound(notFoundHandler);

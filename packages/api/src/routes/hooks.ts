@@ -169,9 +169,10 @@ hooksRouter.post(
       workingDir: data.workingDirectory || process.cwd(),
     });
 
-    // Claude Code セッション ID を紐付け
+    // Claude Code セッション ID を紐付け + processing 状態に更新
     updateSession(session.sessionId, {
       claudeSessionId: data.sessionId,
+      status: "processing",
     });
 
     log.info("Session started", {

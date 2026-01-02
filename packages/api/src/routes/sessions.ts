@@ -28,6 +28,7 @@ import {
   getSessionSummary,
 } from "../repositories/session";
 import { findProjectByWorkingDir } from "../services/project-linking";
+import { getSessionsTokenCounts } from "../repositories/observation";
 import { messagesRouter } from "./messages";
 import { observationsRouter } from "./observations";
 
@@ -141,7 +142,19 @@ sessionsRouter.get(
       includeDeleted: query.includeDeleted,
     });
 
-    return c.json(result);
+    // トークン数を一括取得して付与
+    const sessionIds = result.items.map((s) => s.sessionId);
+    const tokenCounts = getSessionsTokenCounts(sessionIds);
+
+    const itemsWithTokens = result.items.map((session) => ({
+      ...session,
+      tokenCount: tokenCounts.get(session.sessionId) || 0,
+    }));
+
+    return c.json({
+      ...result,
+      items: itemsWithTokens,
+    });
   }
 );
 

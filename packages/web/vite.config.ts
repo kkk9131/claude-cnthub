@@ -4,6 +4,8 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  // Viewer UI は /viewer/ パスで配信されるため base を設定
+  base: "/viewer/",
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -25,7 +27,9 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "dist",
+    // plugin/ui に出力 (R-10: Viewer UI 統合方式)
+    outDir: "../../plugin/ui",
+    emptyOutDir: true,
     sourcemap: true,
   },
 });

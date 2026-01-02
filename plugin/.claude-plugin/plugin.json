@@ -24,17 +24,5 @@
         "CNTHUB_API_URL": "http://localhost:3048"
       }
     }
-  },
-  "slashCommands": [
-    {
-      "name": "cnthub:get",
-      "description": "Retrieve and inject context from past completed sessions",
-      "source_file": "${CLAUDE_PLUGIN_ROOT}/commands/cnthub-get.md"
-    },
-    {
-      "name": "cnthub:export",
-      "description": "Export current session observations to new sessions with AI summary",
-      "source_file": "${CLAUDE_PLUGIN_ROOT}/commands/cnthub-export.md"
-    }
-  ]
+  }
 }
