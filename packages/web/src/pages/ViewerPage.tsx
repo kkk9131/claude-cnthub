@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ViewerSidebar } from "../components/ViewerSidebar";
 import { NodeEditor } from "../components/NodeEditor";
+import { SmartExportModal } from "../components/SmartExportModal";
 import { useTheme } from "../hooks/useTheme";
 import { MoonIcon, SunIcon } from "../components/icons";
 
@@ -48,6 +49,7 @@ export function ViewerPage() {
       observationCount: 0,
       tokenCount: 0,
     });
+  const [smartExportOpen, setSmartExportOpen] = useState(false);
 
   // エディタに表示するセッション（非表示を除外）
   const visibleSessions = sessions.filter(
@@ -127,7 +129,6 @@ export function ViewerPage() {
     });
   }, []);
 
-
   // セッションクリックで詳細表示
   const handleSessionClick = useCallback((session: Session) => {
     console.log("[Viewer] Session clicked:", session.sessionId);
@@ -141,78 +142,25 @@ export function ViewerPage() {
     // TODO: MCP 経由で inject_context を呼び出し
   }, []);
 
-  // export 操作（選択セッションを新規保存）
-  const handleExportSession = useCallback(
-    async (sessionIds: string[]) => {
-      const session = currentSessionData.session;
-      const observations = currentSessionData.observations;
-      const obsCount = observations.length;
+  // export 操作（Smart Export モーダルを開く）
+  const handleExportSession = useCallback(() => {
+    const session = currentSessionData.session;
+    const obsCount = currentSessionData.observationCount;
 
-      if (!session || obsCount === 0) {
-        alert("エクスポートするobservationsがありません");
-        return;
-      }
+    if (!session || obsCount === 0) {
+      alert("エクスポートするobservationsがありません");
+      return;
+    }
 
-      console.log("[Viewer] Export sessions:", sessionIds);
+    console.log("[Viewer] Opening Smart Export modal:", session.sessionId);
+    setSmartExportOpen(true);
+  }, [currentSessionData]);
 
-      // 確認ダイアログ
-      const groupName = window.prompt(
-        `Export: ${obsCount} observations\n\n新しいセッション名を入力してください:`,
-        `Export from ${session.name}`
-      );
-
-      if (!groupName) {
-        console.log("[Viewer] Export cancelled");
-        return;
-      }
-
-      try {
-        const observationIds = observations.map((o) => o.observationId);
-
-        console.log("[Viewer] Exporting:", {
-          sessionId: session.sessionId,
-          observationIds: observationIds.slice(0, 5),
-          totalCount: observationIds.length,
-          groupName,
-        });
-
-        const response = await fetch(
-          `/api/sessions/${session.sessionId}/export`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ observationIds, groupName }),
-          }
-        );
-
-        const responseText = await response.text();
-        console.log("[Viewer] Response:", response.status, responseText);
-
-        if (!response.ok) {
-          const error = JSON.parse(responseText);
-          throw new Error(
-            error.error?.message || `Export failed: ${response.status}`
-          );
-        }
-
-        const result = JSON.parse(responseText);
-        alert(
-          `Export 完了!\n\n新しいセッション: ${result.session?.sessionId}\n観測数: ${result.observations?.length || 0}`
-        );
-
-        console.log("[Viewer] Export result:", result);
-
-        // セッション一覧を再取得してUIを更新
-        await fetchSessions();
-      } catch (err) {
-        console.error("[Viewer] Export error:", err);
-        alert(
-          `Export 失敗: ${err instanceof Error ? err.message : "Unknown error"}`
-        );
-      }
-    },
-    [currentSessionData, fetchSessions]
-  );
+  // Smart Export 完了時のコールバック
+  const handleSmartExportComplete = useCallback(async () => {
+    console.log("[Viewer] Smart Export completed");
+    await fetchSessions();
+  }, [fetchSessions]);
 
   return (
     <div className="h-screen flex flex-col bg-[var(--bg-base)]">
@@ -258,6 +206,17 @@ export function ViewerPage() {
           />
         </main>
       </div>
+
+      {/* Smart Export モーダル */}
+      {currentSessionData.session && (
+        <SmartExportModal
+          isOpen={smartExportOpen}
+          onClose={() => setSmartExportOpen(false)}
+          sessionId={currentSessionData.session.sessionId}
+          sessionName={currentSessionData.session.name}
+          onExportComplete={handleSmartExportComplete}
+        />
+      )}
     </div>
   );
 }

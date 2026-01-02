@@ -307,7 +307,10 @@ export function NodeEditor({
   const observationCount = currentSessionData?.observationCount ?? 0;
 
   // コンテキストノードの初期位置を復元
-  const contextPosition = storedPositions.current["context"] || { x: 400, y: 200 };
+  const contextPosition = storedPositions.current["context"] || {
+    x: 400,
+    y: 200,
+  };
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([
     {
