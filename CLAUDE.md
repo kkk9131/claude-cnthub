@@ -47,16 +47,22 @@ bun run lint          # リント
 | [04-api.md](Agent-docs/04-api.md) | REST/WebSocket API 仕様 |
 | [05-test.md](Agent-docs/05-test.md) | テスト戦略・カバレッジ目標 |
 | [06-ui.md](Agent-docs/06-ui.md) | 画面設計・コンポーネント構成 |
+| [07-plugin-requirements.md](Agent-docs/07-plugin-requirements.md) | Plugin 要件定義 |
 
 ## ディレクトリ構成
 
 ```
-packages/
-├── api/      # Backend (Hono + Bun)
-├── web/      # Frontend (React + Vite)
-├── shared/   # 共通型定義
-├── plugin/   # Claude Plugin パッケージ
-└── cli/      # CLI ツール (任意)
+claude-cnthub/
+├── packages/
+│   ├── api/      # Backend (Hono + Bun, Port 3048)
+│   ├── web/      # Frontend (React + Vite) ※V-01で plugin/ui/ に移行予定
+│   └── shared/   # 共通型定義
+├── plugin/       # Claude Code Plugin
+│   ├── .claude-plugin/   # プラグインマニフェスト
+│   ├── commands/         # スラッシュコマンド定義
+│   ├── hooks/            # Hook イベント定義
+│   └── scripts/          # Hook/MCP スクリプト
+└── Agent-docs/   # 詳細仕様書
 ```
 
 ## 環境変数

@@ -1,0 +1,13 @@
+{
+  "name": "claude-cnthub",
+  "owner": {
+    "name": "kazuto"
+  },
+  "plugins": [
+    {
+      "name": "claude-cnthub",
+      "source": "./",
+      "description": "Session management and AI memory for Claude Code. Captures session summaries, enables semantic search, and provides cross-session context injection."
+    }
+  ]
+}

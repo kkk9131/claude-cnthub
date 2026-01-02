@@ -8,6 +8,7 @@ dist/
 build/
 .next/
 out/
+.vite/
 
 # Bun
 bun.lockb
@@ -42,3 +43,17 @@ coverage/
 # Misc
 *.tsbuildinfo
 .turbo/
+
+# Claude Code Harness (runtime)
+.claude-code-harness/
+.claude-code-harness-version
+
+# Claude Code runtime state
+.claude/state/session.json
+.claude/state/tooling-policy.json
+.claude/state/skills-decision.json
+.claude/state/test-recommendation.json
+.claude/memory/session-log.md
+
+# Generated files
+@agent.summary.md

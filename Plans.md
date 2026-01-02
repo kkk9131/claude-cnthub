@@ -55,16 +55,16 @@ Claude Code CLI
 
 | ID | タスク | 要件ID | ブランチ | 状態 |
 |----|--------|--------|---------|------|
-| H-01 | PostToolUse Hook（リアルタイム観測記録） | R-02 | `feature/posttooluse-hook` | `cc:TODO` |
-| H-02 | SessionEnd 要約→タイトル→Embedding 連鎖 | R-01,R-04,R-05 | `feature/sessionend-summary` | `cc:TODO` |
-| H-03 | SessionStart コンテキスト注入 | R-07 | `feature/sessionstart-inject` | `cc:TODO` |
+| H-01 | PostToolUse Hook（リアルタイム観測記録） | R-02 | `feature/posttooluse-hook` | `cc:完了` |
+| H-02 | SessionEnd 要約→タイトル→Embedding 連鎖 | R-01,R-04,R-05 | `feature/sessionend-summary` | `cc:完了` |
+| H-03 | SessionStart コンテキスト注入 | R-07 | `feature/sessionstart-inject` | `cc:完了` |
 
 ### 1-B: スラッシュコマンド (高優先度)
 
 | ID | タスク | 要件ID | ブランチ | 状態 |
 |----|--------|--------|---------|------|
-| CMD-01 | `/cnthub:get` - 過去セッション取得 | R-08 | `feature/cmd-get` | `cc:TODO` |
-| CMD-02 | `/cnthub:export` - 現在セッション書き出し | R-09 | `feature/cmd-export` | `cc:TODO` |
+| CMD-01 | `/cnthub:get` - 過去セッション取得 | R-08 | `feature/cmd-get` | `cc:完了` |
+| CMD-02 | `/cnthub:export` - 現在セッション書き出し | R-09 | `feature/cmd-export` | `cc:完了` |
 
 ### 1-C: Viewer UI (中優先度)
 
@@ -144,11 +144,12 @@ Claude Code CLI
 ## 次の優先タスク
 
 ```
-1. H-01 - PostToolUse Hook（リアルタイム観測記録）
-2. H-02 - SessionEnd 要約→タイトル→Embedding 連鎖生成
-3. H-03 - SessionStart コンテキスト注入
-4. CMD-01 - /cnthub:get コマンド
-5. CMD-02 - /cnthub:export コマンド
+1. H-01 - PostToolUse Hook（リアルタイム観測記録）  ✅ 完了
+2. H-02 - SessionEnd 要約→タイトル→Embedding 連鎖生成  ✅ 完了
+3. CMD-01 - /cnthub:get コマンド  ✅ 完了
+4. H-03 - SessionStart コンテキスト注入  ✅ 完了
+5. CMD-02 - /cnthub:export コマンド  ✅ 完了
+6. V-01 - Viewer UI 基盤  ← 次
 ```
 
 > 詳細な要件は [07-plugin-requirements.md](./Agent-docs/07-plugin-requirements.md) を参照

@@ -112,6 +112,13 @@ function isValidTranscriptPath(filePath) {
   // 基本的なパス正規化
   const normalized = path.resolve(filePath);
   const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+
+  // セキュリティ: HOME未定義時は全パスが許可されるのを防止
+  if (!homeDir) {
+    console.error("[cnthub] HOME directory not defined");
+    return false;
+  }
+
   const allowedBase = path.join(homeDir, ".claude");
 
   // 論理パスでの初期チェック

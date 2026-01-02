@@ -152,6 +152,28 @@ export function getSessionById(sessionId: string): Session | null {
 }
 
 /**
+ * Claude Code セッション ID でセッションを取得
+ *
+ * Claude Code が提供する外部セッション ID で検索する
+ */
+export function getSessionByClaudeId(claudeSessionId: string): Session | null {
+  try {
+    const row = queryOne<Record<string, unknown>>(
+      "SELECT * FROM sessions WHERE claude_session_id = ?",
+      claudeSessionId
+    );
+
+    return row ? toSession(row) : null;
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to get session by Claude ID: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
  * セッション一覧を取得
  */
 export function listSessions(

@@ -110,14 +110,21 @@ describe("Hook API", () => {
     });
 
     it("既存セッションを再開できる", async () => {
-      // 事前にセッションを作成
-      const session = createSession({
-        name: "Existing Session",
-        workingDir: "/tmp/existing",
-      });
+      // 同じ claudeSessionId で2回 session-start を呼ぶ
+      const claudeSessionId = `test-resume-session-${Date.now()}`;
 
+      // 1回目: 新規作成
+      const firstRes = await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        workingDirectory: "/tmp/existing",
+      });
+      expect(firstRes.status).toBe(201);
+      const firstJson = await firstRes.json();
+      expect(firstJson.action).toBe("created");
+
+      // 2回目: 再開
       const res = await request("POST", "/hook/session-start", {
-        sessionId: session.sessionId,
+        sessionId: claudeSessionId,
       });
 
       expect(res.status).toBe(200);
@@ -152,18 +159,73 @@ describe("Hook API", () => {
 
       expect(res.status).toBe(400);
     });
+
+    it("requestContext=true でもセッション作成が成功する", async () => {
+      const res = await request("POST", "/hook/session-start", {
+        sessionId: `test-context-session-${Date.now()}`,
+        workingDirectory: "/home/user/my-project",
+        requestContext: true,
+      });
+
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.action).toBe("created");
+      expect(json.id).toBeDefined();
+      // contextText は関連セッションがない場合 null になる
+      expect(json).toHaveProperty("contextText");
+    });
+
+    it("contextQuery を指定して検索できる", async () => {
+      const res = await request("POST", "/hook/session-start", {
+        sessionId: `test-query-session-${Date.now()}`,
+        workingDirectory: "/home/user/project",
+        requestContext: true,
+        contextQuery: "API implementation",
+      });
+
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.action).toBe("created");
+      // 関連セッションがない場合は null、ある場合は文字列
+      expect(
+        json.contextText === null || typeof json.contextText === "string"
+      ).toBe(true);
+    });
+
+    it("既存セッション再開時もコンテキスト注入を要求できる", async () => {
+      const claudeSessionId = `test-resume-context-${Date.now()}`;
+
+      // 1回目: 新規作成
+      await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        workingDirectory: "/tmp/test",
+      });
+
+      // 2回目: 再開（コンテキスト注入を要求）
+      const res = await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        requestContext: true,
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.action).toBe("resumed");
+      expect(json).toHaveProperty("contextText");
+    });
   });
 
   // ==================== POST /hook/session-end ====================
   describe("POST /hook/session-end", () => {
     it("セッションを正常終了できる", async () => {
-      const session = createSession({
-        name: "Test Session",
-        workingDir: "/tmp/test",
+      // session-start API 経由でセッション作成（claudeSessionId が登録される）
+      const claudeSessionId = `test-end-session-${Date.now()}`;
+      await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        workingDirectory: "/tmp/test",
       });
 
       const res = await request("POST", "/hook/session-end", {
-        sessionId: session.sessionId,
+        sessionId: claudeSessionId,
         status: "completed",
       });
 
@@ -173,13 +235,15 @@ describe("Hook API", () => {
     });
 
     it("セッションをエラー終了できる", async () => {
-      const session = createSession({
-        name: "Test Session",
-        workingDir: "/tmp/test",
+      // session-start API 経由でセッション作成
+      const claudeSessionId = `test-error-session-${Date.now()}`;
+      await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        workingDirectory: "/tmp/test",
       });
 
       const res = await request("POST", "/hook/session-end", {
-        sessionId: session.sessionId,
+        sessionId: claudeSessionId,
         status: "error",
       });
 
@@ -194,6 +258,115 @@ describe("Hook API", () => {
       });
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  // ==================== POST /hook/post-tooluse ====================
+  describe("POST /hook/post-tooluse", () => {
+    it("ツール使用を観測記録として保存できる", async () => {
+      // 事前にセッションを session-start API 経由で作成（claudeSessionId が登録される）
+      const claudeSessionId = `test-session-${Date.now()}`;
+      await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        workingDirectory: "/tmp/test",
+      });
+
+      const res = await request("POST", "/hook/post-tooluse", {
+        sessionId: claudeSessionId,
+        toolName: "Read",
+        title: "Read: /path/to/file.ts",
+        content: "file contents here...",
+        metadata: { tool_input: '{"file_path":"/path/to/file.ts"}' },
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.status).toBe("recorded");
+      expect(json.observationId).toBeDefined();
+      expect(json.observationId).toMatch(/^ch_ob_/);
+    });
+
+    it("セッションが存在しない場合はスキップする", async () => {
+      const res = await request("POST", "/hook/post-tooluse", {
+        sessionId: "non-existent-session-id",
+        toolName: "Bash",
+        title: "Bash: ls",
+        content: "output",
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.status).toBe("skipped");
+      expect(json.reason).toBe("session_not_found");
+    });
+
+    it("コンテンツなしでも記録できる", async () => {
+      // 事前にセッションを session-start API 経由で作成
+      const claudeSessionId = `test-session-no-content-${Date.now()}`;
+      await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        workingDirectory: "/tmp/test",
+      });
+
+      const res = await request("POST", "/hook/post-tooluse", {
+        sessionId: claudeSessionId,
+        toolName: "Write",
+        title: "Write: /path/to/new-file.ts",
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.status).toBe("recorded");
+    });
+
+    it("無効なsessionIdを拒否する", async () => {
+      const res = await request("POST", "/hook/post-tooluse", {
+        sessionId: "", // 空文字
+        toolName: "Read",
+        title: "Read: file",
+      });
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe("Validation Error");
+    });
+
+    it("toolNameが欠落している場合エラーを返す", async () => {
+      const res = await request("POST", "/hook/post-tooluse", {
+        sessionId: "valid-session-id",
+        title: "Some title",
+      });
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe("Validation Error");
+    });
+
+    it("titleが欠落している場合エラーを返す", async () => {
+      const res = await request("POST", "/hook/post-tooluse", {
+        sessionId: "valid-session-id",
+        toolName: "Read",
+      });
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toBe("Validation Error");
+    });
+
+    it("長すぎるコンテンツを拒否する", async () => {
+      const session = createSession({
+        name: "Test Session",
+        workingDir: "/tmp/test",
+      });
+
+      const res = await request("POST", "/hook/post-tooluse", {
+        sessionId: session.sessionId,
+        toolName: "Read",
+        title: "Read: large file",
+        content: "x".repeat(11000), // 10000文字超
+      });
+
+      expect(res.status).toBe(400);
     });
   });
 

@@ -16,6 +16,7 @@ const {
   readHookContext,
   validateHookContext,
   sendToAPI,
+  isValidTranscriptPath,
   getErrorMessage,
 } = require("./hook-utils");
 
@@ -26,12 +27,25 @@ async function main() {
       process.exit(0);
     }
 
+    // transcript_path を検証（存在する場合のみ）
+    let transcriptPath = null;
+    if (context.transcript_path) {
+      if (isValidTranscriptPath(context.transcript_path)) {
+        transcriptPath = context.transcript_path;
+      } else {
+        console.error("[cnthub] Invalid transcript path, skipping");
+      }
+    }
+
     const response = await sendToAPI("/hook/session-end", {
       sessionId: context.session_id,
+      // 直接フィールドとして送信（優先される）
+      transcriptPath: transcriptPath,
       endedAt: new Date().toISOString(),
       status: "completed",
+      // 後方互換性のため metadata にも含める
       metadata: {
-        transcriptPath: context.transcript_path,
+        transcriptPath: transcriptPath,
         cwd: context.cwd,
       },
     });
@@ -41,7 +55,20 @@ async function main() {
       process.exit(0);
     }
 
-    console.error(`[cnthub] Session ended: ${context.session_id}`);
+    // レスポンスを解析
+    let responseData;
+    try {
+      responseData = await response.json();
+    } catch {
+      responseData = {};
+    }
+
+    const processingInfo = responseData.processingStarted
+      ? " (processing summary)"
+      : "";
+    console.error(
+      `[cnthub] Session ended: ${context.session_id}${processingInfo}`
+    );
     process.exit(0);
   } catch (error) {
     if (error.name === "AbortError") {

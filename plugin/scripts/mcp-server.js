@@ -126,6 +126,63 @@ const TOOLS = [
       required: ["sessionIds"],
     },
   },
+  {
+    name: "list_observations",
+    description:
+      "List observations for a session. Returns tool uses, decisions, errors, and notes.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: {
+          type: "string",
+          description:
+            "Session ID to get observations from. Use 'current' for the current session.",
+        },
+        type: {
+          type: "string",
+          description: "Filter by observation type",
+          enum: [
+            "tool_use",
+            "decision",
+            "error",
+            "learning",
+            "note",
+            "file_change",
+          ],
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of results (default: 100)",
+          default: 100,
+        },
+      },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "export_observations",
+    description:
+      "Export selected observations as a new session with AI-generated summary. Used by /cnthub:export command.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sourceSessionId: {
+          type: "string",
+          description: "Source session ID to export from",
+        },
+        observationIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Observation IDs to include in the export",
+        },
+        groupName: {
+          type: "string",
+          description: "Name for the exported session/group",
+        },
+      },
+      required: ["sourceSessionId", "observationIds", "groupName"],
+    },
+  },
 ];
 
 /**
@@ -218,6 +275,14 @@ async function handleToolCall(params, id) {
         result = await injectContext(args);
         break;
 
+      case "list_observations":
+        result = await listObservations(args);
+        break;
+
+      case "export_observations":
+        result = await exportObservations(args);
+        break;
+
       default:
         return {
           jsonrpc: JSONRPC_VERSION,
@@ -282,7 +347,7 @@ async function searchSessions({ query, limit = 10 }) {
 
   const data = await response.json();
   // Handle paginated response: { items: [...], pagination: {...} }
-  return Array.isArray(data) ? data : (data.items || data.results || []);
+  return Array.isArray(data) ? data : data.items || data.results || [];
 }
 
 /**
@@ -303,13 +368,17 @@ async function listSessions({ status, projectId, limit = 20 }) {
   }
 
   const data = await response.json();
-  
+
   // Handle paginated response: { items: [...], pagination: {...} }
-  const sessions = Array.isArray(data) ? data : (data.items || []);
+  const sessions = Array.isArray(data)
+    ? data
+    : Array.isArray(data.items)
+      ? data.items
+      : [];
 
   // Return Level 0 index (lightweight)
   return sessions.map((s) => ({
-    id: s.id,
+    id: s.sessionId || s.id,
     name: s.name || s.title,
     status: s.status,
     tags: s.tags || [],
@@ -330,6 +399,68 @@ async function getSession({ sessionId }) {
 
   if (!response.ok) {
     throw new Error(`Get session failed: ${response.status}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * 観測記録一覧取得
+ * @param {Object} options - オプション
+ * @param {string} options.sessionId - セッション ID ('current' で現在のセッション)
+ * @param {string} [options.type] - 観測タイプでフィルタ
+ * @param {number} [options.limit=100] - 結果数の上限
+ * @returns {Promise<Array>} 観測記録一覧
+ */
+async function listObservations({ sessionId, type, limit = 100 }) {
+  const params = new URLSearchParams();
+  if (sessionId && sessionId !== "current") {
+    params.set("sessionId", sessionId);
+  }
+  if (type) params.set("type", type);
+  params.set("limit", limit.toString());
+
+  const response = await fetchWithTimeout(
+    `${API_URL}/api/sessions/${sessionId}/observations?${params}`
+  );
+
+  if (!response.ok) {
+    throw new Error(`List observations failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  // Handle paginated response
+  return Array.isArray(data)
+    ? data
+    : Array.isArray(data.items)
+      ? data.items
+      : [];
+}
+
+/**
+ * 観測記録をエクスポート（新セッションとして保存）
+ * @param {Object} options - オプション
+ * @param {string} options.sourceSessionId - ソースセッション ID
+ * @param {string[]} options.observationIds - エクスポートする観測 ID 配列
+ * @param {string} options.groupName - グループ名（新セッション名）
+ * @returns {Promise<Object>} 作成されたセッション情報
+ */
+async function exportObservations({
+  sourceSessionId,
+  observationIds,
+  groupName,
+}) {
+  const response = await fetchWithTimeout(
+    `${API_URL}/api/sessions/${sourceSessionId}/export`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ observationIds, groupName }),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Export observations failed: ${response.status}`);
   }
 
   return await response.json();

@@ -29,6 +29,7 @@ import {
 } from "../repositories/session";
 import { findProjectByWorkingDir } from "../services/project-linking";
 import { messagesRouter } from "./messages";
+import { observationsRouter } from "./observations";
 
 const sessionsRouter = new Hono();
 
@@ -233,5 +234,17 @@ sessionsRouter.get("/:id/summary", async (c) => {
  * /sessions/:sessionId/messages/*
  */
 sessionsRouter.route("/:sessionId/messages", messagesRouter);
+
+/**
+ * Observations サブルート
+ * /sessions/:sessionId/observations/*
+ */
+sessionsRouter.route("/:sessionId/observations", observationsRouter);
+
+/**
+ * Export エンドポイント（observationsRouter から直接アクセス可能にする）
+ * /sessions/:sessionId/export
+ */
+sessionsRouter.route("/:sessionId", observationsRouter);
 
 export { sessionsRouter };

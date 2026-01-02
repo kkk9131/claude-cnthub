@@ -63,9 +63,9 @@ packages/api/src/routes/hooks.ts     # POST /hook/post-tooluse
 ```
 
 **完了条件:**
-- [ ] PostToolUse Hook スクリプト作成
-- [ ] hooks.json に PostToolUse 設定追加
-- [ ] observations テーブルに記録
+- [x] PostToolUse Hook スクリプト作成
+- [x] hooks.json に PostToolUse 設定追加
+- [x] observations テーブルに記録
 
 ---
 
@@ -85,10 +85,10 @@ packages/api/src/services/           # 要約・タイトル・Embedding連鎖
 ```
 
 **完了条件:**
-- [ ] トランスクリプト読み込み
-- [ ] Claude AI で要約 + タイトル生成
-- [ ] Transformers.js で Embedding 生成
-- [ ] DB 保存（summaries, embeddings）
+- [x] トランスクリプト読み込み
+- [x] Claude AI で要約 + タイトル生成
+- [x] Transformers.js で Embedding 生成
+- [x] DB 保存（summaries, embeddings）
 
 ---
 
@@ -107,9 +107,9 @@ packages/api/src/routes/hooks.ts      # 関連セッション検索
 ```
 
 **完了条件:**
-- [ ] sqlite-vec でベクトル検索
-- [ ] 関連セッション要約を stdout に出力
-- [ ] Claude に自動注入
+- [x] sqlite-vec でベクトル検索
+- [x] 関連セッション要約を stdout に出力
+- [x] Claude に自動注入
 
 ---
 
@@ -137,10 +137,10 @@ packages/api/src/routes/commands.ts  # コマンド用 API（任意）
 ```
 
 **完了条件:**
-- [ ] コマンド定義ファイル作成
-- [ ] セッション一覧取得ロジック
-- [ ] 選択 UI（リストベース）
-- [ ] コンテキスト注入
+- [x] コマンド定義ファイル作成
+- [x] セッション一覧取得ロジック
+- [x] 選択 UI（リストベース）
+- [x] コンテキスト注入
 
 ---
 
@@ -167,10 +167,10 @@ packages/api/src/routes/commands.ts  # エクスポート API
 ```
 
 **完了条件:**
-- [ ] コマンド定義ファイル作成
-- [ ] 観測記録取得ロジック
-- [ ] AI グループ分け
-- [ ] 選択→要約→保存フロー
+- [x] コマンド定義ファイル作成
+- [x] 観測記録取得ロジック
+- [x] AI グループ分け
+- [x] 選択→要約→保存フロー
 
 ---
 
@@ -326,16 +326,17 @@ plugin/ui/src/components/
 ```
 Phase 1: Plugin 機能実装
 ─────────────────────────────────────────
-1-A Hook 実装:     ░░░░░░░░░░ 0/3
-1-B スラッシュコマンド: ░░░░░░░░░░ 0/2
+1-A Hook 実装:     ██████████ 3/3 ✅
+1-B スラッシュコマンド: ██████████ 2/2 ✅
 1-C Viewer UI:     ░░░░░░░░░░ 0/3
 ─────────────────────────────────────────
-Phase 1 Total:     ░░░░░░░░░░ 0/8
+Phase 1 Total:     ██████░░░░ 5/8
 
 # 次の優先タスク
-1. H-01 - PostToolUse Hook（リアルタイム観測記録）
-2. H-02 - SessionEnd 要約→タイトル→Embedding 連鎖生成
-3. H-03 - SessionStart コンテキスト注入
-4. CMD-01 - /cnthub:get コマンド
-5. CMD-02 - /cnthub:export コマンド
+1. H-01 - PostToolUse Hook ✅
+2. H-02 - SessionEnd 要約連鎖 ✅
+3. CMD-01 - /cnthub:get ✅
+4. H-03 - SessionStart コンテキスト注入 ✅
+5. CMD-02 - /cnthub:export コマンド ✅
+6. V-01 - Viewer UI 基盤  ← 次
 ```
