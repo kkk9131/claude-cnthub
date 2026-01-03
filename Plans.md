@@ -1,6 +1,6 @@
 # Plans.md - claude-cnthub 開発計画
 
-> 最終更新: 2026-01-02
+> 最終更新: 2026-01-04
 > ビジョン: LLM セッションの永続化・コンテキスト共有・クロスLLM連携プラットフォーム
 > 要件定義: [07-plugin-requirements.md](./Agent-docs/07-plugin-requirements.md)
 
@@ -11,7 +11,8 @@ Phase 1: Claude Code Plugin
 ──────────────────────────────────────────────────
 Claude Code CLI
       │
-      ├── SessionStart Hook → コンテキスト注入 (R-07)
+      ├── SessionStart Hook → セッション登録のみ
+      ├── UserPromptSubmit Hook → コンテキスト注入 + セッション名生成 (R-07)
       ├── PostToolUse Hook → リアルタイム観測 (R-02)
       └── SessionEnd Hook → 要約・Embedding (R-01, R-04, R-05)
               │
@@ -45,73 +46,28 @@ Claude Code CLI
 - [x] I-03: 新セッション ID 体系 (`ch_ss_0001`)
 - [x] I-04: ローカル Embedding フォールバック
 
-</details>
+### Phase 1: Plugin 機能実装 ✅
+- [x] H-01: PostToolUse Hook（リアルタイム観測記録）
+- [x] H-02: SessionEnd 要約→タイトル→Embedding 連鎖
+- [x] H-03: SessionStart コンテキスト注入
+- [x] CMD-01: `/cnthub:get` - 過去セッション取得
+- [x] CMD-02: `/cnthub:export` - 現在セッション書き出し
+- [x] V-01〜V-03: Viewer UI（基盤・一覧・ノードエディタ）
 
----
+### Phase 1.5: Smart Export ✅
+- [x] SE-01: AI グルーピング API
+- [x] SE-02: グループ選択 UI
+- [x] SE-03: Export & 削除 API
+- [x] SE-04: UI 統合
 
-## Phase 1: Plugin 機能実装 `現在`
-
-### 1-A: Hook 実装 (高優先度)
-
-| ID | タスク | 要件ID | ブランチ | 状態 |
-|----|--------|--------|---------|------|
-| H-01 | PostToolUse Hook（リアルタイム観測記録） | R-02 | `feature/posttooluse-hook` | `cc:完了` |
-| H-02 | SessionEnd 要約→タイトル→Embedding 連鎖 | R-01,R-04,R-05 | `feature/sessionend-summary` | `cc:完了` |
-| H-03 | SessionStart コンテキスト注入 | R-07 | `feature/sessionstart-inject` | `cc:完了` |
-
-### 1-B: スラッシュコマンド (高優先度)
-
-| ID | タスク | 要件ID | ブランチ | 状態 |
-|----|--------|--------|---------|------|
-| CMD-01 | `/cnthub:get` - 過去セッション取得 | R-08 | `feature/cmd-get` | `cc:完了` |
-| CMD-02 | `/cnthub:export` - 現在セッション書き出し | R-09 | `feature/cmd-export` | `cc:完了` |
-
-### 1-C: Viewer UI (中優先度)
-
-| ID | タスク | 要件ID | ブランチ | 状態 |
-|----|--------|--------|---------|------|
-| V-01 | Viewer UI 基盤 (packages/web → plugin/ui 統合) | R-10 | `feature/viewer-base` | `cc:TODO` |
-| V-02 | セッション一覧 (プロジェクト切替) | R-11 | `feature/viewer-sidebar` | `cc:TODO` |
-| V-03 | ノードエディタ (get/export 操作) | R-12 | `feature/viewer-node-editor` | `cc:TODO` |
-
----
-
-## 削除予定
-
-<details>
-<summary>不要になったタスク（クリックで展開）</summary>
-
-以下は要件再定義により不要になったタスク:
-
-### 旧 UI 統合タスク (UI-01〜03)
-> packages/web/ を plugin/ui/ に統合するため不要
-
-- ~~UI-01: TreeView を SessionList に統合~~
-- ~~UI-02: ProjectSwitcher を Sidebar に統合~~
-- ~~UI-03: DnD + MergeUI をセッション画面に統合~~
-
-### 旧 GUI コンポーネント (G-01〜04)
-> Viewer UI で React Flow ベースに再実装するため不要
-
-- ~~G-01: ツリービューコンポーネント~~
-- ~~G-02: ドラッグ&ドロップ基盤~~
-- ~~G-03: マージ操作 UI~~
-- ~~G-04: プロジェクト切替 UI~~
-
-### CLI (C-01〜04)
-> Plugin 動作に不要、将来の拡張として保留
-
-- ~~C-01: CLI パッケージ初期化~~
-- ~~C-02: `cnthub list`~~
-- ~~C-03: `cnthub search`~~
-- ~~C-04: `cnthub merge`~~
-
-### 旧 Skills (S-01〜03)
-> CMD-01, CMD-02 に置き換え
-
-- ~~S-01: cnthub:add Skill 定義~~
-- ~~S-02: cnthub:search Skill 定義~~
-- ~~S-03: cnthub:gui Skill 定義~~
+### Phase 1.6: Context Management 強化 ✅
+- [x] API-01: pending_inject API
+- [x] API-02: セッション名生成 API
+- [x] HOOK-01: SessionStart 改修（コンテキスト注入削除）
+- [x] HOOK-02: SessionEnd 改修（タイトル生成スキップ）
+- [x] HOOK-03: UserPromptSubmit Hook 新規作成
+- [x] CMD-01: /cnthub:export 改修（コンテキスト削減対応）
+- [x] CMD-02: /cnthub:get 改修（merged ステータス対応）
 
 </details>
 
@@ -141,15 +97,38 @@ Claude Code CLI
 
 ---
 
-## 次の優先タスク
+## Context Management フロー（Phase 1.6 完了）
 
 ```
-1. H-01 - PostToolUse Hook（リアルタイム観測記録）  ✅ 完了
-2. H-02 - SessionEnd 要約→タイトル→Embedding 連鎖生成  ✅ 完了
-3. CMD-01 - /cnthub:get コマンド  ✅ 完了
-4. H-03 - SessionStart コンテキスト注入  ✅ 完了
-5. CMD-02 - /cnthub:export コマンド  ✅ 完了
-6. V-01 - Viewer UI 基盤  ← 次
+┌─────────────────────────────────────────────────────────────────┐
+│  Context Management フロー                                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  SessionStart                                                   │
+│       │                                                         │
+│       └─ (セッション登録のみ、コンテキスト注入なし)              │
+│                                                                 │
+│  UserPromptSubmit（初回メッセージ）                              │
+│       │                                                         │
+│       ├─ /cnthub:get → 手動選択（従来通り）                     │
+│       ├─ /cnthub:export → Smart Export（改修版）               │
+│       └─ 通常メッセージ → 自動検索 + additionalContext 注入     │
+│                                                                 │
+│  /cnthub:export 改修版                                          │
+│       │                                                         │
+│       ├─ Export 完了後、確認表示                                │
+│       │   「選択部分をコンテキストから取り除きますか？」         │
+│       │                                                         │
+│       ├─ Yes → 残り部分を backend 保存                          │
+│       │        ユーザーに /clear を促す                         │
+│       │                                                         │
+│       └─ /clear 後の次メッセージで残り部分を自動注入            │
+│                                                                 │
+│  SessionEnd                                                     │
+│       │                                                         │
+│       └─ 要約・Embedding のみ（タイトル生成スキップ）           │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-> 詳細な要件は [07-plugin-requirements.md](./Agent-docs/07-plugin-requirements.md) を参照
+詳細は [TASKS.md](./TASKS.md) 参照

@@ -19,6 +19,7 @@ import { hooksRouter } from "./routes/hooks";
 import { mergesRouter } from "./routes/merges";
 import { memoriesRouter, legacyMemoriesRouter } from "./routes/memories";
 import { projectsRouter } from "./routes/projects";
+import { injectRouter } from "./routes/inject";
 
 // Viewer UI の静的ファイルパスを解決
 const VIEWER_UI_PATH = resolve(join(__dirname, "../../../plugin/ui"));
@@ -77,6 +78,9 @@ export function createApp(): Hono {
 
   // Projects API（プロジェクト管理）
   newApp.route("/api/projects", projectsRouter);
+
+  // Inject API（pending コンテキスト管理）
+  newApp.route("/api/inject", injectRouter);
 
   // Viewer UI 静的配信 (R-10)
   // /viewer/* で plugin/ui/ の静的ファイルを配信

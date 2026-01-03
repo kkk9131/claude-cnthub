@@ -4,7 +4,7 @@
  * セッション終了時の連鎖処理を管理:
  * 1. トランスクリプト読み込み
  * 2. Claude AI で要約生成
- * 3. タイトル自動生成
+ * 3. タイトル自動生成（スキップ - UserPromptSubmit Hook で処理）
  * 4. Embedding 生成
  * 5. DB 保存
  *
@@ -16,11 +16,10 @@
 import type { Message, SessionSummary } from "@claude-cnthub/shared";
 import { parseTranscript, validateTranscriptPath } from "./transcript-parser";
 import { generateSummary, extractMetadata } from "./summarizer";
-import { generateSessionName } from "./auto-naming";
 import { generateEmbedding, type EmbeddingResult } from "./embeddings";
 import { createSummary } from "../repositories/summary";
 import { saveEmbedding } from "../repositories/embedding";
-import { updateSession, getSessionById } from "../repositories/session";
+import { getSessionById } from "../repositories/session";
 import { hookLogger as log } from "../utils/logger";
 
 /**
@@ -166,37 +165,14 @@ export async function processSessionEnd(
     }
   }
 
-  // Step 3: タイトル生成
-  let generatedTitle = "";
-  if (summary) {
-    try {
-      generatedTitle = await generateSessionName(
-        {
-          ...summary,
-          changes: [],
-          errors: [],
-          decisions: [],
-        },
-        { session, maxLength: 50 }
-      );
-      result.generatedTitle = generatedTitle;
-      result.steps.titleGenerated = true;
-      log.info("Title generated", {
-        sessionId: input.sessionId,
-        title: generatedTitle,
-      });
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      result.errors.push(`Title generation failed: ${errMsg}`);
-      log.warn("Title generation failed", {
-        sessionId: input.sessionId,
-        error: errMsg,
-      });
-      // フォールバック: 最初のメッセージを使用
-      generatedTitle = messages[0]?.content.slice(0, 50) || "Untitled Session";
-      result.generatedTitle = generatedTitle;
-    }
-  }
+  // Step 3: タイトル生成（スキップ）
+  // セッション名は UserPromptSubmit Hook で初回メッセージから生成されるため、
+  // ここでの生成はスキップする
+  // Note: 既にセッション名がある場合は上書きしない
+  result.steps.titleGenerated = true; // 互換性維持のため常に true
+  log.info("Title generation skipped (handled by UserPromptSubmit Hook)", {
+    sessionId: input.sessionId,
+  });
 
   // Step 4: Embedding 生成
   let embeddingResult: EmbeddingResult | null = null;
@@ -272,14 +248,9 @@ export async function processSessionEnd(
       }
     }
 
-    // 5.3: セッション名を更新
-    if (generatedTitle) {
-      updateSession(input.sessionId, { name: generatedTitle });
-      log.info("Session name updated", {
-        sessionId: input.sessionId,
-        name: generatedTitle,
-      });
-    }
+    // 5.3: セッション名更新はスキップ
+    // セッション名は UserPromptSubmit Hook で初回メッセージから生成されるため、
+    // ここでの更新は行わない
 
     result.steps.dbSaved = true;
   } catch (error) {

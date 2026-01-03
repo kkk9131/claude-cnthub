@@ -62,6 +62,17 @@ export const ListSessionsSchema = PaginationSchema.extend({
 
 export type ListSessionsQuery = z.infer<typeof ListSessionsSchema>;
 
+/**
+ * セッション名生成リクエスト (API-02)
+ */
+export const GenerateSessionNameSchema = z.object({
+  message: z.string().min(1),
+});
+
+export type GenerateSessionNameRequest = z.infer<
+  typeof GenerateSessionNameSchema
+>;
+
 // ==================== Messages ====================
 
 /**

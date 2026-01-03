@@ -129,6 +129,83 @@ Successfully exported X group(s) as new sessions:
 These sessions are now available for context injection via `/cnthub:get`.
 ```
 
+### Step 8: Context Removal Confirmation
+
+After displaying the export results, ask the user if they want to remove the exported observations from the current context:
+
+```markdown
+---
+
+## Context Management
+
+Would you like to remove the exported observations from the current context?
+
+- **Yes**: The remaining context will be saved and can be restored after `/clear`
+- **No**: Keep the exported observations in the current context (copy only)
+
+Note: This helps reduce context size when working on long sessions.
+```
+
+Wait for the user's response.
+
+### Step 9: Handle Context Removal Response
+
+#### If User selects "Yes":
+
+1. Identify the **remaining observations** (all observations NOT included in the exported groups)
+
+2. Format the remaining observations as context:
+
+```markdown
+<remaining-context>
+## Previously in this session
+
+### Observation: {title}
+{content}
+
+### Observation: {title}
+{content}
+...
+</remaining-context>
+```
+
+3. Save the remaining context to backend using the pending_inject API:
+
+```bash
+curl -X POST http://localhost:3048/api/inject/pending \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "<current Claude Code session ID>",
+    "context": "<remaining observations formatted as context>"
+  }'
+```
+
+4. Inform the user:
+
+```markdown
+## Context Saved
+
+Remaining context (X observations) has been saved.
+
+**Next steps:**
+1. Use `/clear` to reset the conversation and free up context space
+2. The remaining context will be **automatically restored** on your next message
+
+The exported sessions are available via `/cnthub:get` for future reference.
+```
+
+#### If User selects "No":
+
+Display a simple confirmation:
+
+```markdown
+## Export Complete
+
+Your observations have been copied to new sessions. The current context remains unchanged.
+
+Use `/cnthub:get` to inject the exported sessions as context in future work.
+```
+
 ## Output Format Template
 
 ### Group Detection Output
@@ -165,7 +242,46 @@ Successfully exported {exportedCount} group(s):
 
 ---
 
-Use `/cnthub:get` to inject these sessions as context in future work.
+These sessions are now available for context injection via `/cnthub:get`.
+```
+
+### Context Removal Confirmation Output
+
+```markdown
+---
+
+## Context Management
+
+Would you like to remove the exported observations from the current context?
+
+- **Yes**: The remaining context will be saved and can be restored after `/clear`
+- **No**: Keep the exported observations in the current context (copy only)
+
+Note: This helps reduce context size when working on long sessions.
+```
+
+### Context Saved Output (Yes response)
+
+```markdown
+## Context Saved
+
+Remaining context ({remainingCount} observations) has been saved.
+
+**Next steps:**
+1. Use `/clear` to reset the conversation and free up context space
+2. The remaining context will be **automatically restored** on your next message
+
+The exported sessions are available via `/cnthub:get` for future reference.
+```
+
+### Export Only Output (No response)
+
+```markdown
+## Export Complete
+
+Your observations have been copied to new sessions. The current context remains unchanged.
+
+Use `/cnthub:get` to inject the exported sessions as context in future work.
 ```
 
 ## Error Handling
@@ -177,6 +293,8 @@ Use `/cnthub:get` to inject these sessions as context in future work.
 - If export fails for a group: Continue with other groups and note the failure: "Failed to export group 'X': {error message}"
 
 - If user cancels: "Export cancelled. No changes were made."
+
+- If pending inject API fails: "Failed to save remaining context. Your export was successful, but context removal is not available. The exported sessions are still available via `/cnthub:get`."
 
 ## Example Conversation
 
@@ -236,7 +354,34 @@ Successfully exported 2 group(s):
 
 ---
 
-Use `/cnthub:get` to inject these sessions as context in future work.
+These sessions are now available for context injection via `/cnthub:get`.
+
+---
+
+## Context Management
+
+Would you like to remove the exported observations from the current context?
+
+- **Yes**: The remaining context will be saved and can be restored after `/clear`
+- **No**: Keep the exported observations in the current context (copy only)
+
+Note: This helps reduce context size when working on long sessions.
+
+**User**: Yes
+
+**Assistant**: Saving remaining context...
+
+[Calls POST /api/inject/pending with remaining observations]
+
+## Context Saved
+
+Remaining context (3 observations) has been saved.
+
+**Next steps:**
+1. Use `/clear` to reset the conversation and free up context space
+2. The remaining context will be **automatically restored** on your next message
+
+The exported sessions are available via `/cnthub:get` for future reference.
 
 ## Notes
 
@@ -244,3 +389,8 @@ Use `/cnthub:get` to inject these sessions as context in future work.
 - AI summaries are generated automatically but may fail gracefully (session is still created).
 - Exported sessions can be used with `/cnthub:get` for context injection.
 - Each exported group becomes a standalone session that can be searched and referenced.
+- **Context Removal**: When the user selects "Yes" for context removal:
+  - Non-exported observations are saved to the pending inject API
+  - The pending context expires after 1 hour if not consumed
+  - After `/clear`, the UserPromptSubmit hook automatically restores the remaining context
+  - This feature helps manage context size during long development sessions

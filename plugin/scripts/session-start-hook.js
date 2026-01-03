@@ -3,7 +3,11 @@
  * Session Start Hook
  *
  * Called when a new Claude Code session starts.
- * Registers the session with cnthub API and injects related context.
+ * Registers the session with cnthub API.
+ *
+ * Note: Context injection is NOT performed here because at session start,
+ * we don't know what the user wants to work on yet. Related session search
+ * requires user intent, which is available in UserPromptSubmit hook.
  *
  * Input (stdin JSON):
  * - session_id: string
@@ -13,8 +17,7 @@
  * - hook_event_name: "SessionStart"
  *
  * Output (stdout):
- * - Related session context (if available)
- *   This will be automatically injected into Claude's context.
+ * - None (session registration only)
  */
 
 const {
@@ -24,22 +27,6 @@ const {
   getErrorMessage,
 } = require("./hook-utils");
 
-/**
- * Format context for Claude injection
- * @param {string} contextText - Raw context from API
- * @returns {string} Formatted context for Claude
- */
-function formatContextForInjection(contextText) {
-  if (!contextText) return "";
-
-  // Wrap in a clear section for Claude
-  return `
-<related-sessions>
-${contextText}
-</related-sessions>
-`.trim();
-}
-
 async function main() {
   try {
     const context = await readHookContext();
@@ -47,7 +34,7 @@ async function main() {
       process.exit(0);
     }
 
-    // Request context injection along with session registration
+    // Session registration only (context injection moved to UserPromptSubmit hook)
     const response = await sendToAPI("/hook/session-start", {
       sessionId: context.session_id,
       workingDirectory: context.cwd || process.cwd(),
@@ -56,8 +43,9 @@ async function main() {
       metadata: {
         permissionMode: context.permission_mode,
       },
-      // Request related session context
-      requestContext: true,
+      // Context injection disabled - handled by UserPromptSubmit hook
+      // At session start, we don't know user intent, so related session search won't work
+      requestContext: false,
     });
 
     if (!response.ok) {
@@ -70,13 +58,8 @@ async function main() {
       `[cnthub] Session registered: ${result.id || context.session_id}`
     );
 
-    // Output context to stdout for Claude injection
-    if (result.contextText) {
-      const formattedContext = formatContextForInjection(result.contextText);
-      // stdout goes to Claude as context
-      console.log(formattedContext);
-      console.error("[cnthub] Related context injected");
-    }
+    // No context injection here - will be handled by UserPromptSubmit hook
+    // when user's first prompt provides intent for related session search
 
     process.exit(0);
   } catch (error) {

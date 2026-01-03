@@ -9,6 +9,7 @@
  * - GET    /sessions/:id - セッション詳細
  * - PATCH  /sessions/:id - セッション更新
  * - DELETE /sessions/:id - セッション削除
+ * - POST   /sessions/:id/generate-name - セッション名生成 (API-02)
  */
 
 import { Hono } from "hono";
@@ -17,6 +18,7 @@ import {
   CreateSessionSchema,
   UpdateSessionSchema,
   ListSessionsSchema,
+  GenerateSessionNameSchema,
 } from "../schemas";
 import {
   createSession,
@@ -29,6 +31,7 @@ import {
 } from "../repositories/session";
 import { findProjectByWorkingDir } from "../services/project-linking";
 import { getSessionsTokenCounts } from "../repositories/observation";
+import { generateNameFromMessage } from "../services/session-naming";
 import { messagesRouter } from "./messages";
 import { observationsRouter } from "./observations";
 
@@ -241,6 +244,42 @@ sessionsRouter.get("/:id/summary", async (c) => {
 
   return c.json(summary);
 });
+
+/**
+ * POST /sessions/:id/generate-name - セッション名生成 (API-02)
+ *
+ * 初回メッセージから AI でセッション名を生成する。
+ * グレースフルデグラデーション: AI失敗時はメッセージの先頭50文字をフォールバック。
+ */
+sessionsRouter.post(
+  "/:id/generate-name",
+  zValidator("json", GenerateSessionNameSchema, (result, c) => {
+    if (!result.success) {
+      return c.json(
+        {
+          error: "Validation Error",
+          details: result.error.flatten().fieldErrors,
+        },
+        400
+      );
+    }
+  }),
+  async (c) => {
+    const id = c.req.param("id");
+    const data = c.req.valid("json");
+
+    // セッション存在確認
+    const session = getSessionById(id);
+    if (!session) {
+      return c.json({ error: "Session not found", sessionId: id }, 404);
+    }
+
+    // AI でセッション名を生成
+    const name = await generateNameFromMessage(data.message);
+
+    return c.json({ name });
+  }
+);
 
 /**
  * Messages サブルート

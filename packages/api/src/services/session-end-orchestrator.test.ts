@@ -80,15 +80,8 @@ const mockGetSessionById = vi.fn().mockReturnValue({
   updatedAt: new Date(),
 });
 
-const mockUpdateSession = vi.fn().mockReturnValue({
-  sessionId: "sess-001",
-  name: "Updated Session",
-  status: "completed",
-});
-
 vi.mock("../repositories/session", () => ({
   getSessionById: mockGetSessionById,
-  updateSession: mockUpdateSession,
 }));
 
 // テスト対象モジュール
@@ -204,7 +197,7 @@ describe("Session End Orchestrator", () => {
       expect(result.steps.summaryGenerated).toBe(false);
     });
 
-    it("DB保存が実行される", async () => {
+    it("DB保存が実行される（セッション名更新はスキップ）", async () => {
       const input: SessionEndInput = {
         sessionId: "sess-001",
         transcriptPath: "/test/transcript.jsonl",
@@ -215,7 +208,7 @@ describe("Session End Orchestrator", () => {
       // DB保存が呼び出されたことを確認
       expect(mockCreateSummary).toHaveBeenCalled();
       expect(mockSaveEmbedding).toHaveBeenCalled();
-      expect(mockUpdateSession).toHaveBeenCalled();
+      // セッション名更新はUserPromptSubmit Hookで行うためスキップ
     });
 
     it("Embedding が生成される", async () => {
@@ -230,7 +223,7 @@ describe("Session End Orchestrator", () => {
       expect(mockGenerateEmbedding).toHaveBeenCalled();
     });
 
-    it("生成されたタイトルが結果に含まれる", async () => {
+    it("タイトル生成はスキップされる（titleGenerated は互換性のため true）", async () => {
       const input: SessionEndInput = {
         sessionId: "sess-001",
         transcriptPath: "/test/transcript.jsonl",
@@ -238,8 +231,10 @@ describe("Session End Orchestrator", () => {
 
       const result = await processSessionEnd(input);
 
-      expect(result.generatedTitle).toBeDefined();
-      expect(result.generatedTitle!.length).toBeGreaterThan(0);
+      // タイトル生成はスキップされるため generatedTitle は undefined
+      expect(result.generatedTitle).toBeUndefined();
+      // 互換性のため titleGenerated は常に true
+      expect(result.steps.titleGenerated).toBe(true);
     });
 
     it("要約IDが結果に含まれる", async () => {
@@ -351,18 +346,20 @@ describe("Session End Orchestrator", () => {
       expect(result.embeddingId).toBe(42);
     });
 
-    it("セッション名が更新される", async () => {
+    it("セッション名更新はスキップされる（UserPromptSubmit Hook で処理）", async () => {
       const input: SessionEndInput = {
         sessionId: "sess-001",
         transcriptPath: "/test/transcript.jsonl",
       };
 
-      await processSessionEnd(input);
+      const result = await processSessionEnd(input);
 
-      expect(mockUpdateSession).toHaveBeenCalledWith(
-        "sess-001",
-        expect.objectContaining({ name: expect.any(String) })
-      );
+      // セッション名更新はスキップされる（UserPromptSubmit Hook で処理）
+      // generatedTitle は undefined のまま
+      expect(result.generatedTitle).toBeUndefined();
+      // 処理自体は成功
+      expect(result.success).toBe(true);
+      expect(result.steps.dbSaved).toBe(true);
     });
   });
 });
