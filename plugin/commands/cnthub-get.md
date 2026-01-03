@@ -24,21 +24,7 @@ Note: Filter to show only `completed` and `merged` status sessions.
 
 ### Step 2: Display Session List
 
-Present the sessions as a numbered list in this format:
-
-```
-# Available Sessions
-
-Select sessions to inject context from:
-
-1. [2026-01-02] [completed] Session Name - Brief summary preview...
-2. [2026-01-01] [merged] Another Session - Brief summary preview...
-3. [2025-12-31] [completed] Third Session - Brief summary preview...
-
-Enter session numbers (e.g., "1", "1,2,3", or "all"):
-```
-
-Format each entry as:
+Present the sessions as a numbered list. Format each entry as:
 - `[DATE]` - Session creation date (YYYY-MM-DD)
 - `[STATUS]` - Session status (`completed` or `merged`)
 - `Session Name` - The session name
@@ -86,29 +72,8 @@ Files Modified:
 ...
 ```
 
-## Output Format Template
-
-```markdown
-# Related Context
-
-## Session: {name} ({createdAt})
-{shortSummary}
-
-Key Decisions:
-{keyDecisions as bullet list}
-
-Files Modified:
-{filesModified as bullet list}
-
----
-```
-
 ## Error Handling
 
 - If no completed or merged sessions exist, inform the user: "No completed or merged sessions found. Complete a session first to use context injection."
 - If API is unavailable, inform the user: "cnthub API is not available. Ensure the cnthub server is running on port 3048."
 - If a specific session fails to load, continue with other sessions and note the failure.
-
-## Example Conversation
-
-User: `/cnthub:get`

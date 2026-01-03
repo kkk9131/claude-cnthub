@@ -15,10 +15,22 @@ const path = require("path");
 
 const API_URL = process.env.CNTHUB_API_URL || "http://localhost:3048";
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.dirname(__dirname);
-const FETCH_TIMEOUT = 10000; // 10秒
+const FETCH_TIMEOUT = Number(process.env.CNTHUB_TIMEOUT) || 10000;
+
+// 環境変数未設定の警告
+if (!process.env.CNTHUB_API_URL) {
+  console.error('[cnthub] CNTHUB_API_URL not set, using default: http://localhost:3048');
+}
 
 // MCP Protocol constants
 const JSONRPC_VERSION = "2.0";
+
+// キャッシュ設定
+const currentSessionCache = {
+  sessionId: null,
+  timestamp: 0,
+  ttl: 30000, // 30秒
+};
 
 /**
  * タイムアウト付き fetch
@@ -26,6 +38,7 @@ const JSONRPC_VERSION = "2.0";
  * @param {Object} options - fetch オプション
  * @param {number} [timeout=FETCH_TIMEOUT] - タイムアウト（ミリ秒）
  * @returns {Promise<Response>}
+ * @throws {Error} タイムアウト時は name='AbortError'、その他はネットワークエラー
  */
 async function fetchWithTimeout(url, options = {}, timeout = FETCH_TIMEOUT) {
   const controller = new AbortController();
@@ -37,9 +50,29 @@ async function fetchWithTimeout(url, options = {}, timeout = FETCH_TIMEOUT) {
       signal: controller.signal,
     });
     return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeout}ms`);
+    }
+    throw error;
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+/**
+ * ページネーション対応のレスポンスからアイテム配列を抽出
+ * @param {Array|Object} data - APIレスポンス
+ * @returns {Array} アイテム配列
+ */
+function extractItems(data) {
+  return Array.isArray(data)
+    ? data
+    : Array.isArray(data.items)
+      ? data.items
+      : Array.isArray(data.results)
+        ? data.results
+        : [];
 }
 
 // Tool definitions
@@ -337,17 +370,25 @@ async function handleToolCall(params, id) {
  * @returns {Promise<Array>} 検索結果
  */
 async function searchSessions({ query, limit = 10 }) {
-  const response = await fetchWithTimeout(
-    `${API_URL}/api/search?query=${encodeURIComponent(query)}&limit=${limit}`
-  );
+  // 入力バリデーション
+  if (typeof query !== 'string' || query.length === 0) {
+    throw new Error('Invalid query parameter: query must be a non-empty string');
+  }
+  const safeLimit = Math.min(Math.max(1, Math.floor(Number(limit) || 10)), 50);
+
+  const params = new URLSearchParams({
+    query,
+    limit: String(safeLimit)
+  });
+  const response = await fetchWithTimeout(`${API_URL}/api/search?${params}`);
 
   if (!response.ok) {
-    throw new Error(`Search failed: ${response.status}`);
+    console.error(`[cnthub] Search request failed: ${response.status}`);
+    throw new Error('Search request failed. Please check the API server.');
   }
 
   const data = await response.json();
-  // Handle paginated response: { items: [...], pagination: {...} }
-  return Array.isArray(data) ? data : data.items || data.results || [];
+  return extractItems(data);
 }
 
 /**
@@ -356,25 +397,23 @@ async function searchSessions({ query, limit = 10 }) {
  * @returns {Promise<Array>} セッション一覧
  */
 async function listSessions({ status, projectId, limit = 20 }) {
+  // 入力バリデーション
+  const safeLimit = Math.min(Math.max(1, Math.floor(Number(limit) || 20)), 100);
+
   const params = new URLSearchParams();
   if (status) params.set("status", status);
   if (projectId) params.set("projectId", projectId);
-  params.set("limit", limit.toString());
+  params.set("limit", safeLimit.toString());
 
   const response = await fetchWithTimeout(`${API_URL}/api/sessions?${params}`);
 
   if (!response.ok) {
-    throw new Error(`List sessions failed: ${response.status}`);
+    console.error(`[cnthub] List sessions failed: ${response.status}`);
+    throw new Error('Failed to list sessions. Please check the API server.');
   }
 
   const data = await response.json();
-
-  // Handle paginated response: { items: [...], pagination: {...} }
-  const sessions = Array.isArray(data)
-    ? data
-    : Array.isArray(data.items)
-      ? data.items
-      : [];
+  const sessions = extractItems(data);
 
   // Return Level 0 index (lightweight)
   return sessions.map((s) => ({
@@ -393,15 +432,75 @@ async function listSessions({ status, projectId, limit = 20 }) {
  * @returns {Promise<Object>} セッション詳細
  */
 async function getSession({ sessionId }) {
+  if (!sessionId || typeof sessionId !== 'string') {
+    throw new Error('Invalid sessionId parameter');
+  }
+
   const response = await fetchWithTimeout(
     `${API_URL}/api/sessions/${sessionId}`
   );
 
   if (!response.ok) {
-    throw new Error(`Get session failed: ${response.status}`);
+    if (response.status === 404) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    console.error(`[cnthub] Get session failed: ${response.status}`);
+    throw new Error('Failed to get session. Please check the API server.');
   }
 
   return await response.json();
+}
+
+/**
+ * 現在のセッション ID を解決（キャッシュ付き）
+ * @returns {Promise<string|null>} セッション ID（複数該当する場合は最初の1件）
+ * @throws {Error} API通信エラー時
+ */
+async function resolveCurrentSession() {
+  const now = Date.now();
+
+  // キャッシュが有効な場合は返す
+  if (currentSessionCache.sessionId && 
+      (now - currentSessionCache.timestamp) < currentSessionCache.ttl) {
+    return currentSessionCache.sessionId;
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      `${API_URL}/api/sessions?limit=10`
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+      console.error(`[cnthub] Failed to resolve current session: HTTP ${response.status}`);
+      throw new Error('Failed to fetch sessions from API');
+    }
+
+    const data = await response.json();
+    const sessions = extractItems(data);
+
+    // in_progress または processing のセッションを探す
+    const currentSession = sessions.find(
+      (s) => s.status === "in_progress" || s.status === "processing"
+    );
+
+    const sessionId = currentSession 
+      ? (currentSession.sessionId || currentSession.id) 
+      : null;
+
+    // キャッシュ更新
+    currentSessionCache.sessionId = sessionId;
+    currentSessionCache.timestamp = now;
+
+    return sessionId;
+  } catch (error) {
+    // タイムアウトやネットワークエラーは再throw
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[cnthub] Error resolving current session: ${message}`);
+    throw new Error(`Failed to resolve current session: ${message}`);
+  }
 }
 
 /**
@@ -413,28 +512,43 @@ async function getSession({ sessionId }) {
  * @returns {Promise<Array>} 観測記録一覧
  */
 async function listObservations({ sessionId, type, limit = 100 }) {
-  const params = new URLSearchParams();
-  if (sessionId && sessionId !== "current") {
-    params.set("sessionId", sessionId);
+  // 入力バリデーション
+  const safeLimit = Math.min(Math.max(1, Math.floor(Number(limit) || 100)), 500);
+
+  // 'current' の場合は現在のセッションを解決
+  let resolvedSessionId = sessionId;
+  if (sessionId === "current") {
+    try {
+      resolvedSessionId = await resolveCurrentSession();
+      if (!resolvedSessionId) {
+        throw new Error(
+          "No active session found. Please start a session or use a specific session ID."
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to resolve current session: ${message}`);
+    }
   }
+
+  const params = new URLSearchParams();
   if (type) params.set("type", type);
-  params.set("limit", limit.toString());
+  params.set("limit", safeLimit.toString());
 
   const response = await fetchWithTimeout(
-    `${API_URL}/api/sessions/${sessionId}/observations?${params}`
+    `${API_URL}/api/sessions/${resolvedSessionId}/observations?${params}`
   );
 
   if (!response.ok) {
-    throw new Error(`List observations failed: ${response.status}`);
+    if (response.status === 404) {
+      throw new Error(`Session not found: ${resolvedSessionId}`);
+    }
+    console.error(`[cnthub] List observations failed: ${response.status}`);
+    throw new Error('Failed to list observations. Please check the API server.');
   }
 
   const data = await response.json();
-  // Handle paginated response
-  return Array.isArray(data)
-    ? data
-    : Array.isArray(data.items)
-      ? data.items
-      : [];
+  return extractItems(data);
 }
 
 /**
@@ -450,6 +564,17 @@ async function exportObservations({
   observationIds,
   groupName,
 }) {
+  // 入力バリデーション
+  if (!sourceSessionId || typeof sourceSessionId !== 'string') {
+    throw new Error('Invalid sourceSessionId parameter');
+  }
+  if (!Array.isArray(observationIds) || observationIds.length === 0) {
+    throw new Error('observationIds must be a non-empty array');
+  }
+  if (!groupName || typeof groupName !== 'string') {
+    throw new Error('groupName must be a non-empty string');
+  }
+
   const response = await fetchWithTimeout(
     `${API_URL}/api/sessions/${sourceSessionId}/export`,
     {
@@ -460,7 +585,11 @@ async function exportObservations({
   );
 
   if (!response.ok) {
-    throw new Error(`Export observations failed: ${response.status}`);
+    if (response.status === 404) {
+      throw new Error(`Session not found: ${sourceSessionId}`);
+    }
+    console.error(`[cnthub] Export observations failed: ${response.status}`);
+    throw new Error('Failed to export observations. Please check the API server.');
   }
 
   return await response.json();
@@ -482,7 +611,8 @@ async function getSessionSummary({ sessionId }) {
     if (response.status === 404) {
       return null;
     }
-    throw new Error(`Get session summary failed: ${response.status}`);
+    console.error(`[cnthub] Get session summary failed: ${response.status}`);
+    throw new Error('Failed to get session summary. Please check the API server.');
   }
 
   return await response.json();
@@ -496,7 +626,12 @@ async function getSessionSummary({ sessionId }) {
  * @returns {Promise<Array>} コンテキストデータ
  */
 async function injectContext({ sessionIds, format = "summary" }) {
-  // 並列でセッションと要約を取得
+  // 入力バリデーション
+  if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+    throw new Error('sessionIds must be a non-empty array');
+  }
+
+  // 並列でセッションと要約を取得（Promise.allSettled でエラー分離）
   const dataPromises = sessionIds.map(async (sessionId) => {
     try {
       // セッションと要約を並列で取得
@@ -504,9 +639,10 @@ async function injectContext({ sessionIds, format = "summary" }) {
         getSession({ sessionId }),
         getSessionSummary({ sessionId }),
       ]);
-      return { session, summary };
+      return { status: 'fulfilled', session, summary };
     } catch (error) {
       return {
+        status: 'rejected',
         id: sessionId,
         error: error instanceof Error ? error.message : String(error),
       };
@@ -518,7 +654,7 @@ async function injectContext({ sessionIds, format = "summary" }) {
 
   for (const data of dataList) {
     // エラーの場合はそのまま追加
-    if (data.error) {
+    if (data.status === 'rejected') {
       results.push({ id: data.id, error: data.error });
       continue;
     }
