@@ -73,6 +73,27 @@ Claude Code CLI
 
 ---
 
+## Phase 1.6.1: Context Management バグ修正 `cc:完了`
+
+Phase 1.6 実装後に発見された問題の修正。
+
+| ID | タスク | 原因 | 状態 |
+|----|--------|------|------|
+| BUG-01 | MCP inject_context が summary を返さない | API が summary を含まない | `cc:完了` |
+| BUG-02 | セッション名が UUID のまま更新されない | API が UUID を受け付けない | `cc:完了` |
+| BUG-03 | セッション一覧に重複名が多い | Export 時の名前重複 | `cc:完了` |
+| CLN-01 | 不要セッションのクリーンアップ機能 | - | `cc:完了` |
+
+### 修正内容
+- **BUG-01**: MCP の `injectContext` で `/sessions/:id/summary` も並列で取得
+- **BUG-02**: `getSessionById()` を修正し、`ch_ss_xxxx` と UUID 両方で検索可能に
+- **BUG-03**: Export 時のセッション名にタイムスタンプを追加して重複回避
+- **CLN-01**: `POST /api/sessions/bulk-delete` で一括削除 API を追加
+
+詳細は [TASKS.md](./TASKS.md#phase-161-context-management-バグ修正) 参照
+
+---
+
 ## Phase 2: Cross-LLM 連携 `将来`
 
 <details>
@@ -97,7 +118,7 @@ Claude Code CLI
 
 ---
 
-## Context Management フロー（Phase 1.6 完了）
+## Context Management フロー（Phase 1.6.1 で修正中）
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐

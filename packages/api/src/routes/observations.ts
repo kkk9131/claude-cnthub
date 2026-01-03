@@ -232,9 +232,80 @@ observationsRouter.post("/analyze", async (c) => {
 });
 
 /**
+ * バックグラウンドでAI要約を生成し、セッションに保存する
+ * グレースフルデグラデーション: 失敗してもセッションは維持される
+ */
+async function generateSummaryInBackground(
+  sessionId: string,
+  messages: Message[]
+): Promise<void> {
+  try {
+    log.info("Starting background summary generation", { sessionId });
+
+    // 要約を生成
+    const summary = await generateSummary(sessionId, messages);
+
+    // 要約を summaries テーブルに保存
+    createSummary({
+      sessionId,
+      shortSummary: summary.shortSummary,
+      detailedSummary: summary.detailedSummary,
+      keyDecisions: summary.keyDecisions,
+      filesModified: summary.filesModified,
+      toolsUsed: summary.toolsUsed,
+      topics: summary.topics,
+      originalTokenCount: summary.originalTokenCount,
+      summaryTokenCount: summary.summaryTokenCount,
+      compressionRatio: summary.compressionRatio,
+    });
+
+    // 要約を observation として新セッションに保存（トークン数計算用）
+    const summaryContent = [
+      `## 短い要約\n${summary.shortSummary}`,
+      `\n## 詳細な要約\n${summary.detailedSummary}`,
+      summary.keyDecisions.length > 0
+        ? `\n## 重要な決定事項\n${summary.keyDecisions.map((d) => `- ${d}`).join("\n")}`
+        : "",
+      summary.filesModified.length > 0
+        ? `\n## 変更ファイル\n${summary.filesModified.map((f) => `- ${f}`).join("\n")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    createObservation({
+      sessionId,
+      type: "note",
+      title: `Export Summary (${summary.originalTokenCount} → ${summary.summaryTokenCount} tokens)`,
+      content: summaryContent,
+      metadata: {
+        originalTokenCount: summary.originalTokenCount,
+        summaryTokenCount: summary.summaryTokenCount,
+        compressionRatio: summary.compressionRatio,
+        toolsUsed: summary.toolsUsed,
+        topics: summary.topics,
+      },
+    });
+
+    // 要約完了後にセッションを completed に更新
+    updateSession(sessionId, { status: "completed" });
+
+    log.info("Background summary generation completed", { sessionId });
+  } catch (error) {
+    log.warn("Background summary generation failed (graceful degradation)", {
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    // 失敗してもセッションは completed に設定（要約なしでも使用可能）
+    updateSession(sessionId, { status: "completed" });
+  }
+}
+
+/**
  * POST /sessions/:sessionId/export - 観測記録をエクスポート
  *
  * 選択された観測記録から新しいセッションを作成し、要約を生成する。
+ * セッション作成は即座に完了し、AI要約はバックグラウンドで生成される。
  */
 observationsRouter.post(
   "/export",
@@ -304,14 +375,21 @@ observationsRouter.post(
       );
     }
 
-    // 新しいセッションを作成
+    // 新しいセッションを作成（即座に完了）
+    // セッション名の重複を回避するためにタイムスタンプを追加
+    const exportTimestamp = new Date()
+      .toISOString()
+      .slice(0, 16)
+      .replace("T", " ");
+    const uniqueExportGroupName = `${groupName} (${exportTimestamp})`;
+
     const newSession = createSession({
-      name: groupName,
+      name: uniqueExportGroupName,
       workingDir: sourceSession.workingDir,
       projectId: sourceSession.projectId ?? undefined,
     });
 
-    // 観測記録をメッセージ形式に変換して要約生成
+    // 観測記録をメッセージ形式に変換
     const messages: Message[] = selectedObservations.map((obs) => ({
       messageId: obs.observationId,
       sessionId: newSession.sessionId,
@@ -324,93 +402,110 @@ observationsRouter.post(
       timestamp: obs.createdAt,
     }));
 
-    try {
-      // 要約を生成
-      const summary = await generateSummary(newSession.sessionId, messages);
+    // AI要約をバックグラウンドで生成（レスポンスをブロックしない）
+    setImmediate(() => {
+      generateSummaryInBackground(newSession.sessionId, messages);
+    });
 
-      // 要約を summaries テーブルに保存
-      createSummary({
-        sessionId: newSession.sessionId,
-        shortSummary: summary.shortSummary,
-        detailedSummary: summary.detailedSummary,
-        keyDecisions: summary.keyDecisions,
-        filesModified: summary.filesModified,
-        toolsUsed: summary.toolsUsed,
-        topics: summary.topics,
+    // 即座にレスポンスを返す（要約は非同期で生成される）
+    return c.json(
+      {
+        session: newSession,
+        summary: null, // 要約は後から生成される
+        summaryStatus: "generating", // クライアントに非同期生成中であることを通知
+        observations: [],
+        observationCount: selectedObservations.length,
+      },
+      201
+    );
+  }
+);
+
+/**
+ * バックグラウンドでSmart Export用のAI要約を生成し、セッションに保存する
+ * グレースフルデグラデーション: 失敗してもセッションは維持される
+ */
+async function generateSmartExportSummaryInBackground(
+  sessionId: string,
+  sourceSessionId: string,
+  messages: Message[]
+): Promise<void> {
+  try {
+    log.info("Starting background smart-export summary generation", {
+      sessionId,
+    });
+
+    // 要約を生成
+    const summary = await generateSummary(sessionId, messages);
+
+    // 要約を summaries テーブルに保存
+    createSummary({
+      sessionId,
+      shortSummary: summary.shortSummary,
+      detailedSummary: summary.detailedSummary,
+      keyDecisions: summary.keyDecisions,
+      filesModified: summary.filesModified,
+      toolsUsed: summary.toolsUsed,
+      topics: summary.topics,
+      originalTokenCount: summary.originalTokenCount,
+      summaryTokenCount: summary.summaryTokenCount,
+      compressionRatio: summary.compressionRatio,
+    });
+
+    // 要約を observation として新セッションに保存
+    const summaryContent = [
+      `## 短い要約\n${summary.shortSummary}`,
+      `\n## 詳細な要約\n${summary.detailedSummary}`,
+      summary.keyDecisions.length > 0
+        ? `\n## 重要な決定事項\n${summary.keyDecisions.map((d) => `- ${d}`).join("\n")}`
+        : "",
+      summary.filesModified.length > 0
+        ? `\n## 変更ファイル\n${summary.filesModified.map((f) => `- ${f}`).join("\n")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    createObservation({
+      sessionId,
+      type: "note",
+      title: `Smart Export Summary (${summary.originalTokenCount} → ${summary.summaryTokenCount} tokens)`,
+      content: summaryContent,
+      metadata: {
         originalTokenCount: summary.originalTokenCount,
         summaryTokenCount: summary.summaryTokenCount,
         compressionRatio: summary.compressionRatio,
-      });
+        toolsUsed: summary.toolsUsed,
+        topics: summary.topics,
+        sourceSessionId,
+      },
+    });
 
-      // 要約を observation として新セッションに保存（トークン数計算用）
-      const summaryContent = [
-        `## 短い要約\n${summary.shortSummary}`,
-        `\n## 詳細な要約\n${summary.detailedSummary}`,
-        summary.keyDecisions.length > 0
-          ? `\n## 重要な決定事項\n${summary.keyDecisions.map((d) => `- ${d}`).join("\n")}`
-          : "",
-        summary.filesModified.length > 0
-          ? `\n## 変更ファイル\n${summary.filesModified.map((f) => `- ${f}`).join("\n")}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
+    // 要約完了後にセッションを completed に更新
+    updateSession(sessionId, { status: "completed" });
 
-      createObservation({
-        sessionId: newSession.sessionId,
-        type: "note",
-        title: `Export Summary (${summary.originalTokenCount} → ${summary.summaryTokenCount} tokens)`,
-        content: summaryContent,
-        metadata: {
-          originalTokenCount: summary.originalTokenCount,
-          summaryTokenCount: summary.summaryTokenCount,
-          compressionRatio: summary.compressionRatio,
-          toolsUsed: summary.toolsUsed,
-          topics: summary.topics,
-        },
-      });
-
-      // Export したセッションは completed に設定
-      updateSession(newSession.sessionId, { status: "completed" });
-      newSession.status = "completed";
-
-      return c.json(
-        {
-          session: newSession,
-          summary: {
-            shortSummary: summary.shortSummary,
-            detailedSummary: summary.detailedSummary,
-            keyDecisions: summary.keyDecisions,
-          },
-          observations: [{ type: "note", title: "Export Summary" }],
-          observationCount: selectedObservations.length,
-        },
-        201
-      );
-    } catch (error) {
-      // 要約生成に失敗してもセッションは作成済み
-      log.warn("Summary generation failed in export", {
-        sessionId: newSession.sessionId,
+    log.info("Background smart-export summary generation completed", {
+      sessionId,
+    });
+  } catch (error) {
+    log.warn(
+      "Background smart-export summary generation failed (graceful degradation)",
+      {
+        sessionId,
         error: error instanceof Error ? error.message : String(error),
-      });
-      return c.json(
-        {
-          session: newSession,
-          summary: null,
-          observationCount: selectedObservations.length,
-          warning: "Summary generation failed",
-        },
-        201
-      );
-    }
+      }
+    );
+    // 失敗してもセッションは completed に設定（要約なしでも使用可能）
+    updateSession(sessionId, { status: "completed" });
   }
-);
+}
 
 /**
  * POST /sessions/:sessionId/smart-export - Smart Export (SE-03)
  *
  * 選択された観測記録を Export し、元のセッションから削除する。
  * コンテキスト削減のための機能。
+ * セッション作成と削除は即座に完了し、AI要約はバックグラウンドで生成される。
  */
 observationsRouter.post(
   "/smart-export",
@@ -481,14 +576,21 @@ observationsRouter.post(
       );
     }
 
-    // 新しいセッションを作成
+    // 新しいセッションを作成（即座に完了）
+    // セッション名の重複を回避するためにタイムスタンプを追加
+    const smartExportTimestamp = new Date()
+      .toISOString()
+      .slice(0, 16)
+      .replace("T", " ");
+    const uniqueSmartExportGroupName = `${groupName} (${smartExportTimestamp})`;
+
     const newSession = createSession({
-      name: groupName,
+      name: uniqueSmartExportGroupName,
       workingDir: sourceSession.workingDir,
       projectId: sourceSession.projectId ?? undefined,
     });
 
-    // 観測記録をメッセージ形式に変換して要約生成
+    // 観測記録をメッセージ形式に変換
     const messages: Message[] = selectedObservations.map((obs) => ({
       messageId: obs.observationId,
       sessionId: newSession.sessionId,
@@ -501,113 +603,41 @@ observationsRouter.post(
       timestamp: obs.createdAt,
     }));
 
+    // 元のセッションから observations を削除（コンテキスト削減は同期で実行）
     let deletedCount = 0;
-
-    try {
-      // 要約を生成
-      const summary = await generateSummary(newSession.sessionId, messages);
-
-      // 要約を summaries テーブルに保存
-      createSummary({
-        sessionId: newSession.sessionId,
-        shortSummary: summary.shortSummary,
-        detailedSummary: summary.detailedSummary,
-        keyDecisions: summary.keyDecisions,
-        filesModified: summary.filesModified,
-        toolsUsed: summary.toolsUsed,
-        topics: summary.topics,
-        originalTokenCount: summary.originalTokenCount,
-        summaryTokenCount: summary.summaryTokenCount,
-        compressionRatio: summary.compressionRatio,
-      });
-
-      // 要約を observation として新セッションに保存
-      const summaryContent = [
-        `## 短い要約\n${summary.shortSummary}`,
-        `\n## 詳細な要約\n${summary.detailedSummary}`,
-        summary.keyDecisions.length > 0
-          ? `\n## 重要な決定事項\n${summary.keyDecisions.map((d) => `- ${d}`).join("\n")}`
-          : "",
-        summary.filesModified.length > 0
-          ? `\n## 変更ファイル\n${summary.filesModified.map((f) => `- ${f}`).join("\n")}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      createObservation({
-        sessionId: newSession.sessionId,
-        type: "note",
-        title: `Smart Export Summary (${summary.originalTokenCount} → ${summary.summaryTokenCount} tokens)`,
-        content: summaryContent,
-        metadata: {
-          originalTokenCount: summary.originalTokenCount,
-          summaryTokenCount: summary.summaryTokenCount,
-          compressionRatio: summary.compressionRatio,
-          toolsUsed: summary.toolsUsed,
-          topics: summary.topics,
-          sourceSessionId,
-        },
-      });
-
-      // Export したセッションは completed に設定
-      updateSession(newSession.sessionId, { status: "completed" });
-      newSession.status = "completed";
-
-      // 元のセッションから observations を削除（コンテキスト削減）
-      if (deleteAfterExport) {
-        for (const obs of selectedObservations) {
-          const deleted = deleteObservation(obs.observationId);
-          if (deleted) deletedCount++;
-        }
-        log.info("Smart Export: Deleted observations from source session", {
-          sourceSessionId,
-          deletedCount,
-          newSessionId: newSession.sessionId,
-        });
+    if (deleteAfterExport) {
+      for (const obs of selectedObservations) {
+        const deleted = deleteObservation(obs.observationId);
+        if (deleted) deletedCount++;
       }
-
-      return c.json(
-        {
-          session: newSession,
-          summary: {
-            shortSummary: summary.shortSummary,
-            detailedSummary: summary.detailedSummary,
-            keyDecisions: summary.keyDecisions,
-          },
-          observationCount: selectedObservations.length,
-          deletedCount,
-          deleteAfterExport,
-        },
-        201
-      );
-    } catch (error) {
-      // 要約生成に失敗してもセッションは作成済み
-      log.warn("Summary generation failed in smart-export", {
-        sessionId: newSession.sessionId,
-        error: error instanceof Error ? error.message : String(error),
+      log.info("Smart Export: Deleted observations from source session", {
+        sourceSessionId,
+        deletedCount,
+        newSessionId: newSession.sessionId,
       });
-
-      // 削除は実行（要約失敗でもコンテキスト削減は優先）
-      if (deleteAfterExport) {
-        for (const obs of selectedObservations) {
-          const deleted = deleteObservation(obs.observationId);
-          if (deleted) deletedCount++;
-        }
-      }
-
-      return c.json(
-        {
-          session: newSession,
-          summary: null,
-          observationCount: selectedObservations.length,
-          deletedCount,
-          deleteAfterExport,
-          warning: "Summary generation failed",
-        },
-        201
-      );
     }
+
+    // AI要約をバックグラウンドで生成（レスポンスをブロックしない）
+    setImmediate(() => {
+      generateSmartExportSummaryInBackground(
+        newSession.sessionId,
+        sourceSessionId,
+        messages
+      );
+    });
+
+    // 即座にレスポンスを返す（要約は非同期で生成される）
+    return c.json(
+      {
+        session: newSession,
+        summary: null, // 要約は後から生成される
+        summaryStatus: "generating", // クライアントに非同期生成中であることを通知
+        observationCount: selectedObservations.length,
+        deletedCount,
+        deleteAfterExport,
+      },
+      201
+    );
   }
 );
 

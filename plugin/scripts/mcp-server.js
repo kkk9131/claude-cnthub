@@ -467,6 +467,28 @@ async function exportObservations({
 }
 
 /**
+ * セッション要約取得
+ * @param {Object} options - オプション
+ * @param {string} options.sessionId - セッション ID
+ * @returns {Promise<Object>} セッション要約
+ */
+async function getSessionSummary({ sessionId }) {
+  const response = await fetchWithTimeout(
+    `${API_URL}/api/sessions/${sessionId}/summary`
+  );
+
+  if (!response.ok) {
+    // 要約が見つからない場合は null を返す
+    if (response.status === 404) {
+      return null;
+    }
+    throw new Error(`Get session summary failed: ${response.status}`);
+  }
+
+  return await response.json();
+}
+
+/**
  * コンテキスト注入（並列処理）
  * @param {Object} options - オプション
  * @param {string[]} options.sessionIds - セッション ID 配列
@@ -474,45 +496,59 @@ async function exportObservations({
  * @returns {Promise<Array>} コンテキストデータ
  */
 async function injectContext({ sessionIds, format = "summary" }) {
-  // 並列でセッション取得
-  const sessionPromises = sessionIds.map((sessionId) =>
-    getSession({ sessionId }).catch((error) => ({
-      id: sessionId,
-      error: error instanceof Error ? error.message : String(error),
-    }))
-  );
+  // 並列でセッションと要約を取得
+  const dataPromises = sessionIds.map(async (sessionId) => {
+    try {
+      // セッションと要約を並列で取得
+      const [session, summary] = await Promise.all([
+        getSession({ sessionId }),
+        getSessionSummary({ sessionId }),
+      ]);
+      return { session, summary };
+    } catch (error) {
+      return {
+        id: sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
 
-  const sessions = await Promise.all(sessionPromises);
+  const dataList = await Promise.all(dataPromises);
   const results = [];
 
-  for (const session of sessions) {
+  for (const data of dataList) {
     // エラーの場合はそのまま追加
-    if (session.error) {
-      results.push({ id: session.id, error: session.error });
+    if (data.error) {
+      results.push({ id: data.id, error: data.error });
       continue;
     }
+
+    const { session, summary } = data;
 
     switch (format) {
       case "summary":
         results.push({
-          id: session.id,
+          id: session.sessionId || session.id,
           name: session.name,
-          summary: session.summary?.shortSummary || "No summary available",
+          summary: summary?.shortSummary || "No summary available",
         });
         break;
 
       case "changes":
         results.push({
-          id: session.id,
+          id: session.sessionId || session.id,
           name: session.name,
-          changes: session.summary?.changes || [],
-          decisions: session.summary?.decisions || [],
+          changes: summary?.changes || [],
+          decisions: summary?.decisions || summary?.keyDecisions || [],
         });
         break;
 
       case "full":
       default:
-        results.push(session);
+        results.push({
+          ...session,
+          summary,
+        });
     }
   }
 

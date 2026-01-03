@@ -173,3 +173,174 @@ Export 完了後に確認を追加:
 ## 完了日
 
 2026-01-04
+
+---
+
+# Phase 1.6.1: Context Management バグ修正
+
+> 作成日: 2026-01-04
+> 完了日: 2026-01-04
+> Phase 1.6 の実装後に発見された問題の修正
+
+## 問題一覧
+
+| ID | 問題 | 優先度 | 原因 | 状態 |
+|----|------|--------|------|------|
+| BUG-01 | MCP inject_context が summary を返さない | 🔴 Critical | API が summary を含まない | `cc:完了` |
+| BUG-02 | セッション名が UUID のまま更新されない | 🔴 Critical | API が UUID を受け付けない | `cc:完了` |
+| BUG-03 | セッション一覧に重複名が多い | 🟡 Medium | Export 時の名前重複 | `cc:完了` |
+| CLN-01 | 不要なテストセッションのクリーンアップ機能 | 🟢 Low | - | `cc:完了` |
+
+---
+
+## BUG-01: MCP inject_context が summary を返さない
+
+| 項目 | 内容 |
+|------|------|
+| **状態** | `cc:完了` |
+| **優先度** | 🔴 Critical |
+| **ファイル** | `plugin/scripts/mcp-server.js` |
+
+### 現象
+- `/cnthub:get` で `inject_context` を実行すると `"No summary available"` が返る
+- 実際にはセッションに summary は保存されている
+
+### 原因
+- `injectContext` 関数は `getSession` のみ呼び出し
+- `GET /sessions/:id` は summary を含まない
+- summary は `GET /sessions/:id/summary` で別途取得する必要がある
+
+### 修正方針
+```javascript
+// mcp-server.js の injectContext を修正
+async function injectContext({ sessionIds, format = "summary" }) {
+  const results = await Promise.all(
+    sessionIds.map(async (sessionId) => {
+      const session = await getSession({ sessionId });
+      // summary も取得
+      const summary = await getSessionSummary({ sessionId });
+      return { ...session, summary };
+    })
+  );
+  // ...
+}
+```
+
+---
+
+## BUG-02: セッション名が UUID のまま更新されない
+
+| 項目 | 内容 |
+|------|------|
+| **状態** | `cc:完了` |
+| **優先度** | 🔴 Critical |
+| **ファイル** | `packages/api/src/routes/sessions.ts`, `packages/api/src/repositories/session.ts` |
+
+### 現象
+- セッション名が `Session eab254c8-21b7-4a4d-bdce-0b8e66579aff` のまま
+- 期待: AI 生成の意味のある名前
+
+### 根本原因 ✅ 特定済み
+Claude Code Hook が渡す `session_id` は **UUID** だが、API は **cnthub session ID** (`ch_ss_xxxx`) を期待している。
+
+```
+Claude Code Hook
+     │
+     └─ session_id = "85022d53-0d46-480c-8a48-06e07410b1ec" (UUID)
+            │
+            ▼
+     API: /api/sessions/85022d53-.../generate-name
+            │
+            ▼
+     404 Not Found ❌ (ch_ss_xxxx を期待)
+            │
+            ▼
+     セッション名が更新されない
+```
+
+### 修正方針: Option B
+`GET /api/sessions/:id` を **両方の ID 形式** で対応させる。
+
+```typescript
+// sessions.ts - getSessionById を修正
+export function getSessionById(id: string): Session | null {
+  // ch_ss_ で始まる場合は従来通り
+  if (id.startsWith("ch_ss_")) {
+    return queryOne("SELECT * FROM sessions WHERE session_id = ?", id);
+  }
+  // それ以外は claudeSessionId として検索
+  return queryOne("SELECT * FROM sessions WHERE claude_session_id = ?", id);
+}
+```
+
+### 影響範囲
+- `GET /api/sessions/:id`
+- `PATCH /api/sessions/:id`
+- `DELETE /api/sessions/:id`
+- `POST /api/sessions/:id/generate-name`
+- その他 `:id` パラメータを使用する全エンドポイント
+
+---
+
+## BUG-03: セッション一覧に重複名が多い
+
+| 項目 | 内容 |
+|------|------|
+| **状態** | `cc:完了` |
+| **優先度** | 🟡 Medium |
+| **ファイル** | `packages/api/src/routes/observations.ts` |
+
+### 現象
+- `Claude Code プロセス調査` が4つある
+- 同じ groupName で export するとセッション名が重複
+
+### 修正方針
+1. Export 時にセッション名の末尾にタイムスタンプを追加
+   - 例: `Claude Code プロセス調査 (2026-01-04 15:43)`
+2. または連番を追加
+   - 例: `Claude Code プロセス調査 #2`
+
+---
+
+## CLN-01: セッションクリーンアップ機能
+
+| 項目 | 内容 |
+|------|------|
+| **状態** | `cc:完了` |
+| **優先度** | 🟢 Low |
+| **ファイル** | `packages/api/src/routes/sessions.ts`, `packages/api/src/schemas/index.ts` |
+
+### 要件
+- テスト用セッション（ServerStatusCheck, MCP Export Test 等）を削除
+- UI または API で一括削除可能に
+- 安全のため確認ダイアログ付き
+
+### 実装内容
+- `POST /api/sessions/bulk-delete` エンドポイントを追加
+- 最大100件まで一括削除可能
+- 各セッションの削除結果をレスポンスで返却
+
+---
+
+## 並列実行グループ
+
+```
+Wave 1（並列実行可）✅ 完了
+├── BUG-01: MCP inject_context 修正
+├── BUG-02: セッション名生成デバッグ
+└── BUG-03: セッション名重複回避
+
+Wave 2（Wave 1 完了後）✅ 完了
+└── CLN-01: クリーンアップ機能
+```
+
+## 完了条件
+
+- [x] 全タスク `cc:完了`
+- [x] テスト通過（436件パス、既存の Embedding テスト5件のみ失敗）
+- [x] ビルド成功
+- [x] ドキュメント更新
+
+## 完了日
+
+2026-01-04

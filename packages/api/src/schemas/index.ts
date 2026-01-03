@@ -73,6 +73,20 @@ export type GenerateSessionNameRequest = z.infer<
   typeof GenerateSessionNameSchema
 >;
 
+/**
+ * セッション一括削除リクエスト (CLN-01)
+ */
+export const BulkDeleteSessionsSchema = z.object({
+  sessionIds: z
+    .array(z.string())
+    .min(1, "At least 1 session ID is required")
+    .max(100, "Cannot delete more than 100 sessions at once"),
+});
+
+export type BulkDeleteSessionsRequest = z.infer<
+  typeof BulkDeleteSessionsSchema
+>;
+
 // ==================== Messages ====================
 
 /**

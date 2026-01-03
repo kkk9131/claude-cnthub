@@ -133,11 +133,25 @@ export function getSession(sessionId: string): Session | null {
 
 /**
  * セッションをIDで取得（内部用）
+ *
+ * ch_ss_xxxx 形式の cnthub session ID と、UUID 形式の Claude Code session ID の両方で検索可能。
+ * - ch_ss_ で始まる場合: session_id カラムで検索
+ * - それ以外（UUID）: claude_session_id カラムで検索
  */
 export function getSessionById(sessionId: string): Session | null {
   try {
+    // ch_ss_ で始まる場合は session_id で検索
+    if (sessionId.startsWith("ch_ss_")) {
+      const row = queryOne<Record<string, unknown>>(
+        "SELECT * FROM sessions WHERE session_id = ?",
+        sessionId
+      );
+      return row ? toSession(row) : null;
+    }
+
+    // それ以外は claude_session_id として検索（UUID形式）
     const row = queryOne<Record<string, unknown>>(
-      "SELECT * FROM sessions WHERE session_id = ?",
+      "SELECT * FROM sessions WHERE claude_session_id = ?",
       sessionId
     );
 
@@ -245,12 +259,21 @@ export function listSessions(
 
 /**
  * セッションを更新
+ *
+ * ch_ss_xxxx 形式の cnthub session ID と、UUID 形式の Claude Code session ID の両方で更新可能。
  */
 export function updateSession(
   sessionId: string,
   data: UpdateSessionData
 ): Session | null {
   try {
+    // まずセッションを取得して、実際の session_id を解決
+    const existingSession = getSessionById(sessionId);
+    if (!existingSession) {
+      return null;
+    }
+    const actualSessionId = existingSession.sessionId;
+
     const fields: string[] = [];
     const params: (string | number | null)[] = [];
 
@@ -290,19 +313,19 @@ export function updateSession(
     }
 
     if (fields.length === 0) {
-      return getSessionById(sessionId);
+      return existingSession;
     }
 
     fields.push("updated_at = ?");
     params.push(now());
-    params.push(sessionId);
+    params.push(actualSessionId);
 
     execute(
       `UPDATE sessions SET ${fields.join(", ")} WHERE session_id = ?`,
       ...params
     );
 
-    return getSessionById(sessionId);
+    return getSessionById(actualSessionId);
   } catch (error) {
     throw new AppError(
       ErrorCode.DATABASE_ERROR,
@@ -314,14 +337,23 @@ export function updateSession(
 
 /**
  * セッションを論理削除
+ *
+ * ch_ss_xxxx 形式の cnthub session ID と、UUID 形式の Claude Code session ID の両方で削除可能。
  */
 export function deleteSession(sessionId: string): boolean {
   try {
+    // まずセッションを取得して、実際の session_id を解決
+    const existingSession = getSessionById(sessionId);
+    if (!existingSession) {
+      return false;
+    }
+    const actualSessionId = existingSession.sessionId;
+
     const result = execute(
       "UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE session_id = ? AND deleted_at IS NULL",
       now(),
       now(),
-      sessionId
+      actualSessionId
     );
 
     return result.changes > 0;
@@ -336,12 +368,21 @@ export function deleteSession(sessionId: string): boolean {
 
 /**
  * セッションを物理削除（テスト用）
+ *
+ * ch_ss_xxxx 形式の cnthub session ID と、UUID 形式の Claude Code session ID の両方で削除可能。
  */
 export function hardDeleteSession(sessionId: string): boolean {
   try {
+    // まずセッションを取得して、実際の session_id を解決
+    const existingSession = getSessionById(sessionId);
+    if (!existingSession) {
+      return false;
+    }
+    const actualSessionId = existingSession.sessionId;
+
     const result = execute(
       "DELETE FROM sessions WHERE session_id = ?",
-      sessionId
+      actualSessionId
     );
 
     return result.changes > 0;
@@ -486,14 +527,23 @@ function toExtendedSessionSummary(
 
 /**
  * セッションの要約詳細を取得（Level 1）
+ *
+ * ch_ss_xxxx 形式の cnthub session ID と、UUID 形式の Claude Code session ID の両方で取得可能。
  */
 export function getSessionSummary(
   sessionId: string
 ): ExtendedSessionSummary | null {
   try {
+    // まずセッションを取得して、実際の session_id を解決
+    const existingSession = getSessionById(sessionId);
+    if (!existingSession) {
+      return null;
+    }
+    const actualSessionId = existingSession.sessionId;
+
     const row = queryOne<Record<string, unknown>>(
       `SELECT * FROM summaries WHERE session_id = ?`,
-      sessionId
+      actualSessionId
     );
 
     return row ? toExtendedSessionSummary(row) : null;

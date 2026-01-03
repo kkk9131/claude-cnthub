@@ -4,11 +4,12 @@
  * セッションのCRUD操作を提供。
  *
  * エンドポイント:
- * - POST   /sessions     - セッション作成
- * - GET    /sessions     - セッション一覧
- * - GET    /sessions/:id - セッション詳細
- * - PATCH  /sessions/:id - セッション更新
- * - DELETE /sessions/:id - セッション削除
+ * - POST   /sessions              - セッション作成
+ * - GET    /sessions              - セッション一覧
+ * - POST   /sessions/bulk-delete  - セッション一括削除 (CLN-01)
+ * - GET    /sessions/:id          - セッション詳細
+ * - PATCH  /sessions/:id          - セッション更新
+ * - DELETE /sessions/:id          - セッション削除
  * - POST   /sessions/:id/generate-name - セッション名生成 (API-02)
  */
 
@@ -19,6 +20,7 @@ import {
   UpdateSessionSchema,
   ListSessionsSchema,
   GenerateSessionNameSchema,
+  BulkDeleteSessionsSchema,
 } from "../schemas";
 import {
   createSession,
@@ -157,6 +159,52 @@ sessionsRouter.get(
     return c.json({
       ...result,
       items: itemsWithTokens,
+    });
+  }
+);
+
+/**
+ * POST /sessions/bulk-delete - セッション一括削除 (CLN-01)
+ *
+ * テスト用セッションなど不要なセッションを一括で論理削除する。
+ * 最大100件まで一度に削除可能。
+ */
+sessionsRouter.post(
+  "/bulk-delete",
+  zValidator("json", BulkDeleteSessionsSchema, (result, c) => {
+    if (!result.success) {
+      return c.json(
+        {
+          error: "Validation Error",
+          details: result.error.flatten().fieldErrors,
+        },
+        400
+      );
+    }
+  }),
+  async (c) => {
+    const { sessionIds } = c.req.valid("json");
+
+    const results: { id: string; deleted: boolean }[] = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const id of sessionIds) {
+      const deleted = deleteSession(id);
+      results.push({ id, deleted });
+      if (deleted) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+
+    return c.json({
+      success: true,
+      totalRequested: sessionIds.length,
+      successCount,
+      failCount,
+      results,
     });
   }
 );
