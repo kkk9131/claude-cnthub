@@ -317,7 +317,10 @@ export async function analyzeObservations(
     };
   } catch (error) {
     // API エラー時はフォールバック
-    console.error("[observation-analyzer] Agent SDK error, using fallback:", error);
+    console.error(
+      "[observation-analyzer] Agent SDK error, using fallback:",
+      error
+    );
     const groups = createFallbackGroups(observations);
     return {
       groups,

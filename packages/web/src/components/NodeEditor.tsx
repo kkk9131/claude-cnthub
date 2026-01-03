@@ -164,6 +164,19 @@ interface SessionNodeData {
   [key: string]: unknown;
 }
 
+interface MergedSummary {
+  shortSummary: string;
+  detailedSummary: string;
+  keyDecisions?: string[];
+  topics?: string[];
+  sessionCount: number;
+  totalOriginalTokens: number;
+  mergedTokens: number;
+  compressionRatio: number;
+}
+
+type MergeStatus = "idle" | "merging" | "completed" | "error";
+
 interface ContextNodeData {
   label: string;
   sessionId?: string;
@@ -173,6 +186,8 @@ interface ContextNodeData {
   connectedCount: number;
   observationCount: number;
   onExport?: () => void;
+  mergeStatus?: MergeStatus;
+  mergedSummary?: MergedSummary;
   [key: string]: unknown;
 }
 
@@ -215,10 +230,17 @@ function ContextNode({ data }: { data: ContextNodeData }) {
   }, [data]);
 
   const hasSession = !!data.sessionId;
+  const isMerging = data.mergeStatus === "merging";
+  const hasMergedSummary =
+    data.mergeStatus === "completed" && data.mergedSummary;
 
   return (
     <div
-      className="px-6 py-4 bg-[var(--color-primary-600)] text-white rounded-xl shadow-lg min-w-[240px] text-center cursor-pointer hover:bg-[var(--color-primary-500)] transition-colors relative"
+      className={`px-6 py-4 text-white rounded-xl shadow-lg min-w-[240px] text-center cursor-pointer transition-colors relative ${
+        isMerging
+          ? "bg-[var(--color-primary-400)] animate-pulse"
+          : "bg-[var(--color-primary-600)] hover:bg-[var(--color-primary-500)]"
+      }`}
       onClick={handleClick}
     >
       <Handle
@@ -247,6 +269,31 @@ function ContextNode({ data }: { data: ContextNodeData }) {
           +{data.connectedCount} merged
         </span>
       </div>
+
+      {/* マージ状態表示 */}
+      {isMerging && (
+        <div className="text-xs mt-2 bg-white/30 px-2 py-1 rounded">
+          🔄 要約を生成中...
+        </div>
+      )}
+      {hasMergedSummary && (
+        <div className="text-xs mt-2 bg-white/20 px-2 py-1 rounded text-left">
+          <div className="font-bold mb-1">📝 統合要約:</div>
+          <div className="line-clamp-2 opacity-90">
+            {data.mergedSummary?.shortSummary}
+          </div>
+          <div className="opacity-60 mt-1">
+            {data.mergedSummary?.sessionCount}セッション →{" "}
+            {formatTokenCount(data.mergedSummary?.mergedTokens || 0)} tokens
+          </div>
+        </div>
+      )}
+      {data.mergeStatus === "error" && (
+        <div className="text-xs mt-2 bg-red-500/30 px-2 py-1 rounded">
+          ⚠️ マージ失敗
+        </div>
+      )}
+
       <div className="text-xs opacity-60 mt-2">クリックで Export</div>
     </div>
   );
@@ -282,18 +329,39 @@ interface CurrentSessionData {
   tokenCount: number;
 }
 
+interface DeleteTarget {
+  type: "node" | "edge";
+  id: string;
+  name: string;
+}
+
 interface NodeEditorProps {
   sessions?: Session[];
-  currentSessionData?: CurrentSessionData;
+  currentSessionsData?: CurrentSessionData[];
   onGetSession?: (sessionId: string) => void;
-  onExportSession?: (sessionIds: string[]) => void;
+  onExportSession?: (sessionId: string) => void;
+  onDeleteRequest?: (target: DeleteTarget) => void;
+  pendingDelete?: { type: "node" | "edge"; id: string } | null;
+  onDeleteComplete?: () => void;
+  /** セッション接続時のマージ処理 */
+  onMerge?: (sessionIds: string[]) => Promise<MergedSummary | null>;
+  /** 現在のマージ状態 */
+  mergeStatus?: MergeStatus;
+  /** マージ済みの要約 */
+  mergedSummary?: MergedSummary | null;
 }
 
 export function NodeEditor({
   sessions = [],
-  currentSessionData,
+  currentSessionsData = [],
   onGetSession,
   onExportSession,
+  onDeleteRequest,
+  pendingDelete,
+  onDeleteComplete,
+  onMerge,
+  mergeStatus = "idle",
+  mergedSummary,
 }: NodeEditorProps) {
   // 初期化時にlocalStorageから復元
   const storedPositions = useRef(loadPositions());
@@ -304,26 +372,8 @@ export function NodeEditor({
     storedConnected.current
   );
 
-  const observationCount = currentSessionData?.observationCount ?? 0;
-
-  // コンテキストノードの初期位置を復元
-  const contextPosition = storedPositions.current["context"] || {
-    x: 400,
-    y: 200,
-  };
-
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([
-    {
-      id: "context",
-      type: "context",
-      position: contextPosition,
-      data: {
-        label: "現在のコンテキスト",
-        connectedCount: storedConnected.current.length,
-        observationCount: 0,
-      },
-    },
-  ]);
+  // 初期ノードは空（contextノードは動的に生成）
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(storedEdges.current);
 
   // ノード位置変更時に保存
@@ -366,53 +416,120 @@ export function NodeEditor({
     [onEdgesChange, setEdges]
   );
 
-  const handleExport = useCallback(() => {
-    const totalCount = observationCount + connectedSessionIds.length;
-    if (totalCount === 0) {
-      console.log("[Viewer] Export: コンテキストがありません");
-      return;
-    }
-    console.log(
-      "[Viewer] Exportしますか? (" +
-        observationCount +
-        " observations + " +
-        connectedSessionIds.length +
-        " merged sessions)",
-      {
-        currentSession: currentSessionData?.session?.sessionId,
-        connectedSessionIds,
-      }
-    );
-    onExportSession?.(connectedSessionIds);
-  }, [
-    observationCount,
-    connectedSessionIds,
-    currentSessionData,
-    onExportSession,
-  ]);
+  // 各セッション用のexportハンドラを生成
+  const createExportHandler = useCallback(
+    (sessionId: string) => () => {
+      console.log("[Viewer] Export session:", sessionId);
+      onExportSession?.(sessionId);
+    },
+    [onExportSession]
+  );
 
+  // 複数の進行中セッション（contextノード）を生成・更新
   useEffect(() => {
-    const session = currentSessionData?.session;
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === "context") {
-          return {
-            ...node,
+    setNodes((nds) => {
+      const positions = storedPositions.current;
+      const existingContextIds = new Set(
+        nds.filter((n) => n.id.startsWith("context-")).map((n) => n.id)
+      );
+
+      // 新しいcontextノードを生成
+      const newContextNodes: Node[] = [];
+      currentSessionsData.forEach((data, index) => {
+        const session = data.session;
+        if (!session) return;
+
+        const nodeId = `context-${session.sessionId}`;
+        const savedPosition = positions[nodeId];
+        const defaultPosition = {
+          x: 400,
+          y: 100 + index * 180,
+        };
+
+        if (!existingContextIds.has(nodeId)) {
+          newContextNodes.push({
+            id: nodeId,
+            type: "context",
+            position: savedPosition || defaultPosition,
             data: {
-              ...node.data,
-              onExport: handleExport,
-              observationCount,
-              sessionId: session?.sessionId,
-              sessionName: session?.name,
-              status: session?.status,
-              tokenCount: currentSessionData?.tokenCount,
+              label: "進行中セッション",
+              sessionId: session.sessionId,
+              sessionName: session.name,
+              status: session.status,
+              tokenCount: data.tokenCount,
+              connectedCount: connectedSessionIds.length,
+              observationCount: data.observationCount,
+              onExport: createExportHandler(session.sessionId),
+              mergeStatus,
+              mergedSummary,
             },
-          };
+          });
         }
-        return node;
-      })
-    );
-  }, [handleExport, observationCount, currentSessionData, setNodes]);
+      });
+
+      // 既存のcontextノードを更新
+      const validContextIds = new Set(
+        currentSessionsData
+          .filter((d) => d.session)
+          .map((d) => `context-${d.session!.sessionId}`)
+      );
+
+      const updatedNodes = nds
+        .filter((n) => {
+          // contextノードは有効なもののみ保持
+          if (n.id.startsWith("context-")) {
+            return validContextIds.has(n.id);
+          }
+          return true;
+        })
+        .map((node) => {
+          if (node.id.startsWith("context-")) {
+            const sessionId = node.id.replace("context-", "");
+            const data = currentSessionsData.find(
+              (d) => d.session?.sessionId === sessionId
+            );
+            if (data?.session) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  sessionId: data.session.sessionId,
+                  sessionName: data.session.name,
+                  status: data.session.status,
+                  tokenCount: data.tokenCount,
+                  connectedCount: connectedSessionIds.length,
+                  observationCount: data.observationCount,
+                  onExport: createExportHandler(data.session.sessionId),
+                  mergeStatus,
+                  mergedSummary,
+                },
+              };
+            }
+          }
+          return node;
+        });
+
+      const result = [...updatedNodes, ...newContextNodes];
+
+      // 新しいノードが追加されたら位置を保存
+      if (newContextNodes.length > 0) {
+        const allPositions: StoredPositions = {};
+        result.forEach((n) => {
+          allPositions[n.id] = n.position;
+        });
+        savePositions(allPositions);
+      }
+
+      return result;
+    });
+  }, [
+    currentSessionsData,
+    connectedSessionIds,
+    createExportHandler,
+    setNodes,
+    mergeStatus,
+    mergedSummary,
+  ]);
 
   // セッション一覧からノードを生成（保存された位置を復元）
   useEffect(() => {
@@ -450,7 +567,7 @@ export function NodeEditor({
         sessions.map((s) => "session-" + s.sessionId)
       );
       const filteredNodes = nds.filter(
-        (n) => n.id === "context" || validSessionIds.has(n.id)
+        (n) => n.id.startsWith("context-") || validSessionIds.has(n.id)
       );
 
       const result = [...filteredNodes, ...newSessionNodes];
@@ -472,7 +589,11 @@ export function NodeEditor({
     (params: Connection) => {
       if (!params.source || !params.target) return;
 
-      if (params.source.startsWith("session-") && params.target === "context") {
+      // セッションノードから任意のcontextノードへの接続を許可
+      if (
+        params.source.startsWith("session-") &&
+        params.target.startsWith("context-")
+      ) {
         const sessionId = params.source.replace("session-", "");
 
         if (connectedSessionIds.includes(sessionId)) return;
@@ -489,7 +610,7 @@ export function NodeEditor({
 
         setNodes((nds) =>
           nds.map((node) => {
-            if (node.id === "context") {
+            if (node.id.startsWith("context-")) {
               return {
                 ...node,
                 data: {
@@ -503,11 +624,43 @@ export function NodeEditor({
         );
 
         onGetSession?.(sessionId);
+
+        // 2つ以上のセッションが接続されたらマージをトリガー
+        if (newConnectedIds.length >= 2 && onMerge) {
+          onMerge(newConnectedIds);
+        }
       }
     },
-    [connectedSessionIds, setEdges, setNodes, onGetSession]
+    [connectedSessionIds, setEdges, setNodes, onGetSession, onMerge]
   );
 
+  // エッジ削除リクエスト（確認後に実際に削除）
+  const handleEdgeDeleteRequest = useCallback(
+    (edgeId: string) => {
+      const edge = edges.find((e) => e.id === edgeId);
+      if (!edge) return;
+
+      const sessionId = edge.source.replace("session-", "");
+      const session = sessions.find((s) => s.sessionId === sessionId);
+
+      onDeleteRequest?.({
+        type: "edge",
+        id: edgeId,
+        name: session?.name || sessionId,
+      });
+    },
+    [edges, sessions, onDeleteRequest]
+  );
+
+  // エッジクリック時（削除確認を表示）
+  const onEdgeClick = useCallback(
+    (_event: React.MouseEvent, edge: Edge) => {
+      handleEdgeDeleteRequest(edge.id);
+    },
+    [handleEdgeDeleteRequest]
+  );
+
+  // 実際のエッジ削除処理
   const onEdgeDelete = useCallback(
     (deletedEdges: Edge[]) => {
       const deletedSessionIds = deletedEdges
@@ -527,7 +680,7 @@ export function NodeEditor({
 
       setNodes((nds) =>
         nds.map((node) => {
-          if (node.id === "context") {
+          if (node.id.startsWith("context-")) {
             return {
               ...node,
               data: {
@@ -541,6 +694,25 @@ export function NodeEditor({
       );
     },
     [connectedSessionIds, setNodes, setEdges]
+  );
+
+  // ノードクリック時（セッションノードの削除確認を表示）
+  const onNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      // コンテキストノードはクリックでexport（ContextNode内で処理）
+      if (node.id.startsWith("context-")) return;
+
+      // セッションノードは削除確認
+      const sessionId = node.id.replace("session-", "");
+      const session = sessions.find((s) => s.sessionId === sessionId);
+
+      onDeleteRequest?.({
+        type: "node",
+        id: node.id,
+        name: session?.name || sessionId,
+      });
+    },
+    [sessions, onDeleteRequest]
   );
 
   // ノードドラッグ終了時に衝突検出と保存
@@ -576,6 +748,54 @@ export function NodeEditor({
     [nodes, setNodes]
   );
 
+  // 外部からの削除リクエストを処理
+  useEffect(() => {
+    if (!pendingDelete) return;
+
+    if (pendingDelete.type === "edge") {
+      // エッジ削除
+      const edgeToDelete = edges.find((e) => e.id === pendingDelete.id);
+      if (edgeToDelete) {
+        onEdgeDelete([edgeToDelete]);
+        setEdges((eds) => eds.filter((e) => e.id !== pendingDelete.id));
+      }
+    } else if (pendingDelete.type === "node") {
+      // ノード削除（セッションノードのみ、contextノードは削除不可）
+      if (!pendingDelete.id.startsWith("context-")) {
+        // 関連するエッジも削除
+        const relatedEdges = edges.filter(
+          (e) => e.source === pendingDelete.id || e.target === pendingDelete.id
+        );
+        if (relatedEdges.length > 0) {
+          onEdgeDelete(relatedEdges);
+          setEdges((eds) =>
+            eds.filter(
+              (e) =>
+                e.source !== pendingDelete.id && e.target !== pendingDelete.id
+            )
+          );
+        }
+
+        // ノードを削除
+        setNodes((nds) => nds.filter((n) => n.id !== pendingDelete.id));
+
+        // 位置情報から削除
+        const positions = loadPositions();
+        delete positions[pendingDelete.id];
+        savePositions(positions);
+      }
+    }
+
+    onDeleteComplete?.();
+  }, [
+    pendingDelete,
+    edges,
+    onEdgeDelete,
+    setEdges,
+    setNodes,
+    onDeleteComplete,
+  ]);
+
   return (
     <div className="w-full h-full bg-[var(--bg-base)]">
       <ReactFlow
@@ -585,6 +805,8 @@ export function NodeEditor({
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
         onEdgesDelete={onEdgeDelete}
+        onEdgeClick={onEdgeClick}
+        onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         nodeTypes={nodeTypes}
         fitView

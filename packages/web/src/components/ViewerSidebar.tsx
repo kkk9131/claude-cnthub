@@ -6,7 +6,7 @@
  * - ステータスインジケータ付き
  */
 
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "../stores/projectStore";
 import {
   ChevronDownIcon,
@@ -14,26 +14,33 @@ import {
   PlusIcon,
   EyeIcon,
   EyeSlashIcon,
+  TrashIcon,
 } from "./icons";
 
 interface Session {
   sessionId: string;
   name: string;
-  status: "idle" | "active" | "completed" | "error";
+  status: "idle" | "active" | "completed" | "error" | "processing";
   createdAt: string;
   updatedAt: string;
   projectId?: string;
 }
 
 interface ViewerSidebarProps {
+  sessions: Session[];
+  sessionsLoading?: boolean;
   onSessionSelect?: (session: Session) => void;
   onSessionClick?: (session: Session) => void;
+  onSessionDelete?: (session: Session) => void;
   selectedSessionIds?: string[];
 }
 
 export function ViewerSidebar({
+  sessions: allSessions,
+  sessionsLoading = false,
   onSessionSelect,
   onSessionClick,
+  onSessionDelete,
   selectedSessionIds = [],
 }: ViewerSidebarProps) {
   const {
@@ -44,38 +51,20 @@ export function ViewerSidebar({
     selectProject,
   } = useProjectStore();
 
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
 
-  useEffect(() => {
-    const fetchSessions = async () => {
-      setSessionsLoading(true);
-      try {
-        const params = new URLSearchParams({
-          limit: "100",
-          status: "completed",
-        });
-        if (selectedProjectId) {
-          params.set("projectId", selectedProjectId);
-        }
-        const response = await fetch("/api/sessions?" + params);
-        if (!response.ok) throw new Error("Failed to fetch sessions");
-        const data = await response.json();
-        setSessions(data.items || []);
-      } catch (err) {
-        console.error("[ViewerSidebar] Failed to fetch sessions:", err);
-        setSessions([]);
-      } finally {
-        setSessionsLoading(false);
-      }
-    };
-    fetchSessions();
-  }, [selectedProjectId]);
+  // プロジェクトでフィルタ（親から受け取ったセッションを使用）
+  const sessions = useMemo(
+    () =>
+      selectedProjectId
+        ? allSessions.filter((s) => s.projectId === selectedProjectId)
+        : allSessions,
+    [allSessions, selectedProjectId]
+  );
 
   const handleProjectSelect = useCallback(
     (projectId: string | null) => {
@@ -178,6 +167,7 @@ export function ViewerSidebar({
                 isHidden={selectedSessionIds.includes(session.sessionId)}
                 onToggle={onSessionSelect}
                 onClick={onSessionClick}
+                onDelete={onSessionDelete}
               />
             ))}
           </div>
@@ -198,6 +188,7 @@ interface SessionItemProps {
   isHidden: boolean;
   onToggle?: (session: Session) => void;
   onClick?: (session: Session) => void;
+  onDelete?: (session: Session) => void;
 }
 
 const statusColors = {
@@ -205,6 +196,7 @@ const statusColors = {
   active: "bg-blue-500",
   completed: "bg-green-500",
   error: "bg-red-500",
+  processing: "bg-yellow-500",
 };
 
 const SessionItem = memo(function SessionItem({
@@ -212,6 +204,7 @@ const SessionItem = memo(function SessionItem({
   isHidden,
   onToggle,
   onClick,
+  onDelete,
 }: SessionItemProps) {
   const handleToggle = useCallback(
     (e: React.MouseEvent) => {
@@ -225,6 +218,14 @@ const SessionItem = memo(function SessionItem({
     onClick?.(session);
   }, [onClick, session]);
 
+  const handleDelete = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onDelete?.(session);
+    },
+    [onDelete, session]
+  );
+
   const formattedDate = new Date(session.updatedAt).toLocaleDateString(
     "ja-JP",
     { month: "short", day: "numeric" }
@@ -233,7 +234,7 @@ const SessionItem = memo(function SessionItem({
   return (
     <div
       className={
-        "flex items-center gap-1 px-2 py-2 rounded-lg transition-colors " +
+        "group flex items-center gap-1 px-2 py-2 rounded-lg transition-colors " +
         (isHidden ? "opacity-50" : "hover:bg-[var(--bg-elevated)]")
       }
     >
@@ -273,6 +274,13 @@ const SessionItem = memo(function SessionItem({
             {formattedDate}
           </div>
         </div>
+      </button>
+      <button
+        onClick={handleDelete}
+        className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all flex-shrink-0"
+        title="セッションを削除"
+      >
+        <TrashIcon className="w-4 h-4 text-red-400 hover:text-red-300" />
       </button>
     </div>
   );
