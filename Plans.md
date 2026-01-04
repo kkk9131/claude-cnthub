@@ -1,6 +1,6 @@
 # Plans.md - claude-cnthub 開発計画
 
-> 最終更新: 2026-01-04
+> 最終更新: 2026-01-05
 > ビジョン: LLM セッションの永続化・コンテキスト共有・クロスLLM連携プラットフォーム
 > 要件定義: [07-plugin-requirements.md](./Agent-docs/07-plugin-requirements.md)
 
@@ -91,6 +91,47 @@ Phase 1.6 実装後に発見された問題の修正。
 - **CLN-01**: `POST /api/sessions/bulk-delete` で一括削除 API を追加
 
 詳細は [TASKS.md](./TASKS.md#phase-161-context-management-バグ修正) 参照
+
+---
+
+## Phase 1.7: UI統合 `cc:TODO`
+
+> 目的: 実装済みAPI機能をUIに反映し、未実装APIのUI部分を削除
+
+### 概要
+
+```
+削除対象（APIが未実装）:
+├── Work Items ページ全体
+├── workItemStore.ts
+└── マイルストーン・ブロッカー関連UI
+
+追加対象（APIは実装済み）:
+├── プロジェクト管理 CRUD UI
+├── セッション一括削除 UI
+├── メッセージ削除 UI
+└── マージ削除 UI
+
+整理対象:
+├── Settings ページ（削除）
+├── メモリAPI表示（将来検討）
+└── 未使用コンポーネント整理
+```
+
+### タスク一覧
+
+| ID | タスク | 優先度 | 状態 |
+|----|--------|--------|------|
+| UI-DEL-01 | Work Items 関連ファイル削除 | 🔴 High | `cc:TODO` |
+| UI-DEL-02 | Settings ナビゲーション削除 | 🟡 Medium | `cc:TODO` |
+| UI-ADD-01 | セッション一括削除 UI | 🔴 High | `cc:TODO` |
+| UI-ADD-02 | プロジェクト管理 UI | 🟡 Medium | `cc:TODO` |
+| UI-ADD-03 | メッセージ削除 UI | 🟢 Low | `cc:TODO` |
+| UI-ADD-04 | マージ削除 UI | 🟢 Low | `cc:TODO` |
+| UI-FIX-01 | セッション詳細ポップアップ改善 | 🟡 Medium | `cc:TODO` |
+| UI-FIX-02 | テーマ永続化（localStorage） | 🟢 Low | `cc:TODO` |
+
+詳細は [TASKS.md](./TASKS.md#phase-17-ui統合) 参照
 
 ---
 
