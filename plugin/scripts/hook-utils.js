@@ -5,9 +5,13 @@
  */
 
 const path = require("path");
+const { spawn } = require("child_process");
 
 const API_URL = process.env.CNTHUB_API_URL || "http://localhost:3048";
 const FETCH_TIMEOUT = 10000; // 10秒
+const HEALTH_CHECK_TIMEOUT = 2000; // ヘルスチェック用（短め）
+const SERVER_STARTUP_TIMEOUT = 15000; // サーバー起動待ち
+const SERVER_STARTUP_INTERVAL = 500; // ポーリング間隔
 
 /**
  * 標準入力から Hook コンテキストを読み取る
@@ -171,6 +175,115 @@ function getErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * サーバーのヘルスチェック
+ * @returns {Promise<boolean>} サーバーが起動している場合 true
+ */
+async function checkServerHealth() {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      HEALTH_CHECK_TIMEOUT
+    );
+
+    const response = await fetch(`${API_URL}/health`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * API サーバーをバックグラウンドで起動
+ * @returns {Promise<boolean>} 起動成功の場合 true
+ */
+async function startServer() {
+  // プラグインルートからプロジェクトルートを計算
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.dirname(__dirname);
+  const projectRoot = path.resolve(pluginRoot, "..");
+  const apiDir = path.join(projectRoot, "packages", "api");
+
+  console.error(`[cnthub] Starting API server from: ${apiDir}`);
+
+  try {
+    // bun run dev:api をバックグラウンドで起動
+    const child = spawn("bun", ["run", "src/index.ts"], {
+      cwd: apiDir,
+      detached: true,
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+      },
+    });
+
+    // 親プロセスから切り離し
+    child.unref();
+
+    console.error(`[cnthub] API server process spawned (PID: ${child.pid})`);
+    return true;
+  } catch (error) {
+    console.error(`[cnthub] Failed to start server: ${getErrorMessage(error)}`);
+    return false;
+  }
+}
+
+/**
+ * サーバーが起動するまで待機
+ * @param {number} [timeout=SERVER_STARTUP_TIMEOUT] - 最大待機時間（ミリ秒）
+ * @returns {Promise<boolean>} 起動成功の場合 true
+ */
+async function waitForServer(timeout = SERVER_STARTUP_TIMEOUT) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    if (await checkServerHealth()) {
+      return true;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, SERVER_STARTUP_INTERVAL)
+    );
+  }
+
+  return false;
+}
+
+/**
+ * サーバーが起動していることを保証
+ * 起動していなければ起動し、起動完了まで待機
+ * @returns {Promise<boolean>} サーバーが利用可能な場合 true
+ */
+async function ensureServerRunning() {
+  // 既に起動しているか確認
+  if (await checkServerHealth()) {
+    console.error("[cnthub] API server is already running");
+    return true;
+  }
+
+  console.error("[cnthub] API server not running, starting...");
+
+  // サーバーを起動
+  const started = await startServer();
+  if (!started) {
+    return false;
+  }
+
+  // 起動完了を待機
+  const ready = await waitForServer();
+  if (ready) {
+    console.error("[cnthub] API server is now ready");
+    return true;
+  }
+
+  console.error("[cnthub] API server failed to start within timeout");
+  return false;
+}
+
 module.exports = {
   API_URL,
   FETCH_TIMEOUT,
@@ -180,4 +293,6 @@ module.exports = {
   sendToAPI,
   isValidTranscriptPath,
   getErrorMessage,
+  checkServerHealth,
+  ensureServerRunning,
 };

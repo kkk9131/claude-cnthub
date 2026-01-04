@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start-hook.js\"",
-            "timeout": 5000
+            "timeout": 20000
           }
         ]
       }

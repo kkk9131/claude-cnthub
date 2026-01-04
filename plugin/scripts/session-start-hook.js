@@ -25,12 +25,22 @@ const {
   validateHookContext,
   sendToAPI,
   getErrorMessage,
+  ensureServerRunning,
 } = require("./hook-utils");
 
 async function main() {
   try {
     const context = await readHookContext();
     if (!context || !validateHookContext(context)) {
+      process.exit(0);
+    }
+
+    // サーバーが起動していることを保証
+    const serverReady = await ensureServerRunning();
+    if (!serverReady) {
+      console.error(
+        "[cnthub] API server not available, skipping session registration"
+      );
       process.exit(0);
     }
 
