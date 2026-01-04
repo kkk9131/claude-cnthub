@@ -3,7 +3,6 @@ import { Layout } from "./components/Layout";
 import { SessionList } from "./components/SessionList";
 import { ChatView } from "./components/ChatView";
 import { SearchPage } from "./pages/SearchPage";
-import { WorkItemsPage } from "./pages/WorkItemsPage";
 import { ViewerPage } from "./pages/ViewerPage";
 
 function App() {
@@ -34,14 +33,6 @@ function App() {
         element={
           <Layout>
             <SearchPage />
-          </Layout>
-        }
-      />
-      <Route
-        path="/work-items"
-        element={
-          <Layout>
-            <WorkItemsPage />
           </Layout>
         }
       />

@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { SessionsIcon, SearchIcon, SettingsIcon, WorkItemIcon } from "./icons";
+import { SessionsIcon, SearchIcon } from "./icons";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -64,23 +64,8 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               active={isActive("/search")}
               onClick={() => handleNavigation("/search")}
             />
-            <NavItem
-              icon={<WorkItemIcon className="w-5 h-5" />}
-              label="Work Items"
-              active={isActive("/work-items")}
-              onClick={() => handleNavigation("/work-items")}
-            />
           </div>
         </nav>
-
-        <div className="p-3 border-t border-[var(--border-subtle)]">
-          <NavItem
-            icon={<SettingsIcon className="w-5 h-5" />}
-            label="Settings"
-            active={false}
-            onClick={() => {}}
-          />
-        </div>
       </aside>
     </>
   );
