@@ -19,7 +19,9 @@ const FETCH_TIMEOUT = Number(process.env.CNTHUB_TIMEOUT) || 10000;
 
 // 環境変数未設定の警告
 if (!process.env.CNTHUB_API_URL) {
-  console.error('[cnthub] CNTHUB_API_URL not set, using default: http://localhost:3048');
+  console.error(
+    "[cnthub] CNTHUB_API_URL not set, using default: http://localhost:3048"
+  );
 }
 
 // MCP Protocol constants
@@ -51,7 +53,7 @@ async function fetchWithTimeout(url, options = {}, timeout = FETCH_TIMEOUT) {
     });
     return response;
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`Request timeout after ${timeout}ms`);
     }
     throw error;
@@ -371,20 +373,22 @@ async function handleToolCall(params, id) {
  */
 async function searchSessions({ query, limit = 10 }) {
   // 入力バリデーション
-  if (typeof query !== 'string' || query.length === 0) {
-    throw new Error('Invalid query parameter: query must be a non-empty string');
+  if (typeof query !== "string" || query.length === 0) {
+    throw new Error(
+      "Invalid query parameter: query must be a non-empty string"
+    );
   }
   const safeLimit = Math.min(Math.max(1, Math.floor(Number(limit) || 10)), 50);
 
   const params = new URLSearchParams({
     query,
-    limit: String(safeLimit)
+    limit: String(safeLimit),
   });
   const response = await fetchWithTimeout(`${API_URL}/api/search?${params}`);
 
   if (!response.ok) {
     console.error(`[cnthub] Search request failed: ${response.status}`);
-    throw new Error('Search request failed. Please check the API server.');
+    throw new Error("Search request failed. Please check the API server.");
   }
 
   const data = await response.json();
@@ -409,7 +413,7 @@ async function listSessions({ status, projectId, limit = 20 }) {
 
   if (!response.ok) {
     console.error(`[cnthub] List sessions failed: ${response.status}`);
-    throw new Error('Failed to list sessions. Please check the API server.');
+    throw new Error("Failed to list sessions. Please check the API server.");
   }
 
   const data = await response.json();
@@ -432,8 +436,8 @@ async function listSessions({ status, projectId, limit = 20 }) {
  * @returns {Promise<Object>} セッション詳細
  */
 async function getSession({ sessionId }) {
-  if (!sessionId || typeof sessionId !== 'string') {
-    throw new Error('Invalid sessionId parameter');
+  if (!sessionId || typeof sessionId !== "string") {
+    throw new Error("Invalid sessionId parameter");
   }
 
   const response = await fetchWithTimeout(
@@ -445,7 +449,7 @@ async function getSession({ sessionId }) {
       throw new Error(`Session not found: ${sessionId}`);
     }
     console.error(`[cnthub] Get session failed: ${response.status}`);
-    throw new Error('Failed to get session. Please check the API server.');
+    throw new Error("Failed to get session. Please check the API server.");
   }
 
   return await response.json();
@@ -460,22 +464,24 @@ async function resolveCurrentSession() {
   const now = Date.now();
 
   // キャッシュが有効な場合は返す
-  if (currentSessionCache.sessionId && 
-      (now - currentSessionCache.timestamp) < currentSessionCache.ttl) {
+  if (
+    currentSessionCache.sessionId &&
+    now - currentSessionCache.timestamp < currentSessionCache.ttl
+  ) {
     return currentSessionCache.sessionId;
   }
 
   try {
-    const response = await fetchWithTimeout(
-      `${API_URL}/api/sessions?limit=10`
-    );
+    const response = await fetchWithTimeout(`${API_URL}/api/sessions?limit=10`);
 
     if (!response.ok) {
       if (response.status === 404) {
         return null;
       }
-      console.error(`[cnthub] Failed to resolve current session: HTTP ${response.status}`);
-      throw new Error('Failed to fetch sessions from API');
+      console.error(
+        `[cnthub] Failed to resolve current session: HTTP ${response.status}`
+      );
+      throw new Error("Failed to fetch sessions from API");
     }
 
     const data = await response.json();
@@ -486,8 +492,8 @@ async function resolveCurrentSession() {
       (s) => s.status === "in_progress" || s.status === "processing"
     );
 
-    const sessionId = currentSession 
-      ? (currentSession.sessionId || currentSession.id) 
+    const sessionId = currentSession
+      ? currentSession.sessionId || currentSession.id
       : null;
 
     // キャッシュ更新
@@ -513,7 +519,10 @@ async function resolveCurrentSession() {
  */
 async function listObservations({ sessionId, type, limit = 100 }) {
   // 入力バリデーション
-  const safeLimit = Math.min(Math.max(1, Math.floor(Number(limit) || 100)), 500);
+  const safeLimit = Math.min(
+    Math.max(1, Math.floor(Number(limit) || 100)),
+    500
+  );
 
   // 'current' の場合は現在のセッションを解決
   let resolvedSessionId = sessionId;
@@ -544,7 +553,9 @@ async function listObservations({ sessionId, type, limit = 100 }) {
       throw new Error(`Session not found: ${resolvedSessionId}`);
     }
     console.error(`[cnthub] List observations failed: ${response.status}`);
-    throw new Error('Failed to list observations. Please check the API server.');
+    throw new Error(
+      "Failed to list observations. Please check the API server."
+    );
   }
 
   const data = await response.json();
@@ -565,14 +576,14 @@ async function exportObservations({
   groupName,
 }) {
   // 入力バリデーション
-  if (!sourceSessionId || typeof sourceSessionId !== 'string') {
-    throw new Error('Invalid sourceSessionId parameter');
+  if (!sourceSessionId || typeof sourceSessionId !== "string") {
+    throw new Error("Invalid sourceSessionId parameter");
   }
   if (!Array.isArray(observationIds) || observationIds.length === 0) {
-    throw new Error('observationIds must be a non-empty array');
+    throw new Error("observationIds must be a non-empty array");
   }
-  if (!groupName || typeof groupName !== 'string') {
-    throw new Error('groupName must be a non-empty string');
+  if (!groupName || typeof groupName !== "string") {
+    throw new Error("groupName must be a non-empty string");
   }
 
   const response = await fetchWithTimeout(
@@ -589,7 +600,9 @@ async function exportObservations({
       throw new Error(`Session not found: ${sourceSessionId}`);
     }
     console.error(`[cnthub] Export observations failed: ${response.status}`);
-    throw new Error('Failed to export observations. Please check the API server.');
+    throw new Error(
+      "Failed to export observations. Please check the API server."
+    );
   }
 
   return await response.json();
@@ -612,10 +625,48 @@ async function getSessionSummary({ sessionId }) {
       return null;
     }
     console.error(`[cnthub] Get session summary failed: ${response.status}`);
-    throw new Error('Failed to get session summary. Please check the API server.');
+    throw new Error(
+      "Failed to get session summary. Please check the API server."
+    );
   }
 
   return await response.json();
+}
+
+/**
+ * 観測記録を作成
+ * @param {string} sessionId - セッション ID
+ * @param {Object} data - 観測データ
+ * @param {string} data.type - 観測タイプ
+ * @param {string} data.title - タイトル
+ * @param {string} data.content - 内容
+ * @param {Object} [data.metadata] - メタデータ
+ * @returns {Promise<Object|null>} 作成された観測記録、またはエラー時は null
+ */
+async function createObservation(sessionId, data) {
+  try {
+    const response = await fetchWithTimeout(
+      `${API_URL}/api/sessions/${sessionId}/observations`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }
+    );
+
+    if (!response.ok) {
+      console.error(
+        `[cnthub] Failed to create observation: HTTP ${response.status}`
+      );
+      return null;
+    }
+
+    return await response.json();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[cnthub] Error creating observation: ${message}`);
+    return null;
+  }
 }
 
 /**
@@ -628,7 +679,7 @@ async function getSessionSummary({ sessionId }) {
 async function injectContext({ sessionIds, format = "summary" }) {
   // 入力バリデーション
   if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
-    throw new Error('sessionIds must be a non-empty array');
+    throw new Error("sessionIds must be a non-empty array");
   }
 
   // 並列でセッションと要約を取得（Promise.allSettled でエラー分離）
@@ -639,10 +690,10 @@ async function injectContext({ sessionIds, format = "summary" }) {
         getSession({ sessionId }),
         getSessionSummary({ sessionId }),
       ]);
-      return { status: 'fulfilled', session, summary };
+      return { status: "fulfilled", session, summary };
     } catch (error) {
       return {
-        status: 'rejected',
+        status: "rejected",
         id: sessionId,
         error: error instanceof Error ? error.message : String(error),
       };
@@ -654,7 +705,7 @@ async function injectContext({ sessionIds, format = "summary" }) {
 
   for (const data of dataList) {
     // エラーの場合はそのまま追加
-    if (data.status === 'rejected') {
+    if (data.status === "rejected") {
       results.push({ id: data.id, error: data.error });
       continue;
     }
@@ -686,6 +737,49 @@ async function injectContext({ sessionIds, format = "summary" }) {
           summary,
         });
     }
+  }
+
+  // 現在のセッションに注入したコンテキストを記録
+  try {
+    const currentSessionId = await resolveCurrentSession();
+    if (currentSessionId && results.length > 0) {
+      // 注入したコンテキストの要約を作成
+      const injectedSessions = results
+        .filter((r) => !r.error)
+        .map((r) => `- ${r.name} (${r.id})`)
+        .join("\n");
+
+      const injectedContent = results
+        .filter((r) => !r.error)
+        .map((r) => {
+          let content = `## ${r.name} (${r.id})\n`;
+          if (r.summary) content += `Summary: ${r.summary}\n`;
+          if (r.changes && r.changes.length > 0) {
+            content += `Changes:\n${r.changes.map((c) => `- ${c}`).join("\n")}\n`;
+          }
+          if (r.decisions && r.decisions.length > 0) {
+            content += `Decisions:\n${r.decisions.map((d) => `- ${d}`).join("\n")}\n`;
+          }
+          return content;
+        })
+        .join("\n---\n");
+
+      await createObservation(currentSessionId, {
+        type: "note",
+        title: `Context Injected: ${results.filter((r) => !r.error).length} session(s)`,
+        content: injectedContent,
+        metadata: {
+          source: "cnthub:get",
+          sessionIds: sessionIds,
+          format: format,
+          injectedAt: new Date().toISOString(),
+        },
+      });
+    }
+  } catch (error) {
+    // 記録に失敗しても注入自体は成功とする
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[cnthub] Failed to record injected context: ${message}`);
   }
 
   return results;
