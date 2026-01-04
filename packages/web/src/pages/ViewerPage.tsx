@@ -5,11 +5,12 @@
  * - メイン: React Flow ノードエディタ
  */
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { ViewerSidebar } from "../components/ViewerSidebar";
 import { NodeEditor } from "../components/NodeEditor";
 import { SmartExportModal } from "../components/SmartExportModal";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
+import { SessionDetailModal } from "../components/SessionDetailModal";
 import { useTheme } from "../hooks/useTheme";
 import { MoonIcon, SunIcon } from "../components/icons";
 
@@ -77,10 +78,12 @@ export function ViewerPage() {
   const [mergedSummary, setMergedSummary] = useState<MergedSummary | null>(
     null
   );
+  const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
 
   // エディタに表示するセッション（非表示を除外）
-  const visibleSessions = sessions.filter(
-    (s) => !hiddenSessionIds.includes(s.sessionId)
+  const visibleSessions = useMemo(
+    () => sessions.filter((s) => !hiddenSessionIds.includes(s.sessionId)),
+    [sessions, hiddenSessionIds]
   );
 
   // 完了済みセッションを取得
@@ -102,6 +105,8 @@ export function ViewerPage() {
 
   // 現在の進行中セッション（processing または idle）を複数取得 + ポーリング
   useEffect(() => {
+    let isMounted = true;
+
     const fetchCurrentSessions = async () => {
       try {
         const allSessions: Session[] = [];
@@ -121,6 +126,8 @@ export function ViewerPage() {
           const data = await idleRes.json();
           allSessions.push(...(data.items || []));
         }
+
+        if (!isMounted) return;
 
         if (allSessions.length === 0) {
           setCurrentSessionsData([]);
@@ -155,7 +162,9 @@ export function ViewerPage() {
           })
         );
 
-        setCurrentSessionsData(sessionsData);
+        if (isMounted) {
+          setCurrentSessionsData(sessionsData);
+        }
       } catch (err) {
         console.error("[ViewerPage] Failed to fetch current sessions:", err);
       }
@@ -164,7 +173,10 @@ export function ViewerPage() {
     fetchCurrentSessions();
     // 5秒ごとにポーリング
     const interval = setInterval(fetchCurrentSessions, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // サイドバーからセッション表示/非表示を切り替え
@@ -179,11 +191,10 @@ export function ViewerPage() {
     });
   }, []);
 
-  // セッションクリックで詳細表示
+  // セッションクリックで詳細表示 (UI-FIX-01)
   const handleSessionClick = useCallback((session: Session) => {
     console.log("[Viewer] Session clicked:", session.sessionId);
-    // TODO: 詳細画面への遷移を実装
-    alert("セッション詳細: " + session.name + "\n\nID: " + session.sessionId);
+    setDetailSessionId(session.sessionId);
   }, []);
 
   // get 操作（セッションコンテキスト注入）
@@ -203,20 +214,58 @@ export function ViewerPage() {
 
     const targetId = deleteTarget.sessionId;
 
-    const response = await fetch(`/api/sessions/${targetId}`, {
-      method: "DELETE",
-    });
+    try {
+      const response = await fetch(`/api/sessions/${targetId}`, {
+        method: "DELETE",
+      });
 
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error?.message || "削除に失敗しました");
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error?.message || "削除に失敗しました");
+      }
+
+      // ローカル状態を即座に更新（リアルタイム反映）
+      setSessions((prev) => prev.filter((s) => s.sessionId !== targetId));
+      // 非表示リストからも削除
+      setHiddenSessionIds((prev) => prev.filter((id) => id !== targetId));
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error("[ViewerPage] Failed to delete session:", err);
+      alert(
+        err instanceof Error ? err.message : "セッションの削除に失敗しました"
+      );
     }
-
-    // ローカル状態を即座に更新（リアルタイム反映）
-    setSessions((prev) => prev.filter((s) => s.sessionId !== targetId));
-    // 非表示リストからも削除
-    setHiddenSessionIds((prev) => prev.filter((id) => id !== targetId));
   }, [deleteTarget]);
+
+  // セッション一括削除を実行 (UI-ADD-01)
+  const handleBulkDelete = useCallback(async (sessionIds: string[]) => {
+    try {
+      const response = await fetch("/api/sessions/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionIds }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error?.message || "一括削除に失敗しました");
+      }
+
+      const result = await response.json();
+      const deletedIds = new Set(
+        result.results
+          .filter((r: { success: boolean }) => r.success)
+          .map((r: { sessionId: string }) => r.sessionId)
+      );
+
+      // ローカル状態を更新
+      setSessions((prev) => prev.filter((s) => !deletedIds.has(s.sessionId)));
+      setHiddenSessionIds((prev) => prev.filter((id) => !deletedIds.has(id)));
+    } catch (err) {
+      console.error("[ViewerPage] Failed to bulk delete sessions:", err);
+      alert(err instanceof Error ? err.message : "一括削除に失敗しました");
+    }
+  }, []);
 
   // エディタからの削除リクエスト
   const handleEditorDeleteRequest = useCallback(
@@ -359,6 +408,7 @@ export function ViewerPage() {
           onSessionSelect={handleSessionToggle}
           onSessionClick={handleSessionClick}
           onSessionDelete={handleSessionDeleteRequest}
+          onBulkDelete={handleBulkDelete}
           selectedSessionIds={hiddenSessionIds}
         />
 
@@ -411,6 +461,13 @@ export function ViewerPage() {
         targetType={editorDeleteTarget?.type === "node" ? "node" : "edge"}
         targetName={editorDeleteTarget?.name || ""}
         targetId={editorDeleteTarget?.id}
+      />
+
+      {/* セッション詳細モーダル (UI-FIX-01) */}
+      <SessionDetailModal
+        isOpen={!!detailSessionId}
+        onClose={() => setDetailSessionId(null)}
+        sessionId={detailSessionId}
       />
     </div>
   );

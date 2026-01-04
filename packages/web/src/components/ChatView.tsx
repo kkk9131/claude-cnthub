@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { TrashIcon } from "./icons";
 
 const MAX_MESSAGE_LENGTH = 10000;
 
@@ -137,6 +138,31 @@ function ChatViewContent({ sessionId }: ChatViewContentProps) {
     window.location.reload();
   }, []);
 
+  // メッセージ削除 (UI-ADD-03)
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      if (!confirm("このメッセージを削除しますか？")) return;
+
+      try {
+        const response = await fetch(
+          `/api/sessions/${sessionId}/messages/${messageId}`,
+          { method: "DELETE" }
+        );
+
+        if (!response.ok) {
+          throw new Error("メッセージの削除に失敗しました");
+        }
+
+        setMessages((prev) => prev.filter((m) => m.messageId !== messageId));
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "メッセージの削除に失敗しました"
+        );
+      }
+    },
+    [sessionId]
+  );
+
   if (loading) {
     return <ChatSkeleton />;
   }
@@ -165,7 +191,11 @@ function ChatViewContent({ sessionId }: ChatViewContentProps) {
           <EmptyChat />
         ) : (
           messages.map((message) => (
-            <MessageBubble key={message.messageId} message={message} />
+            <MessageBubble
+              key={message.messageId}
+              message={message}
+              onDelete={handleDeleteMessage}
+            />
           ))
         )}
         <div ref={messagesEndRef} />
@@ -211,10 +241,12 @@ function ChatViewContent({ sessionId }: ChatViewContentProps) {
 
 interface MessageBubbleProps {
   message: Message;
+  onDelete?: (messageId: string) => void;
 }
 
 const MessageBubble = memo(function MessageBubble({
   message,
+  onDelete,
 }: MessageBubbleProps) {
   const isUser = message.type === "user";
 
@@ -227,38 +259,58 @@ const MessageBubble = memo(function MessageBubble({
     [message.timestamp]
   );
 
+  const handleDelete = useCallback(() => {
+    onDelete?.(message.messageId);
+  }, [onDelete, message.messageId]);
+
   return (
     <div
-      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+      className={`group flex ${isUser ? "justify-end" : "justify-start"}`}
       role="article"
       aria-label={`Message from ${isUser ? "you" : "assistant"}`}
     >
-      <div
-        className={`
-          max-w-[80%] rounded-2xl px-4 py-3
-          ${
-            message.error
-              ? "bg-red-900/30 border border-red-700 text-red-300 rounded-br-md"
-              : isUser
-                ? "bg-primary-500 text-white rounded-br-md"
-                : "bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-bl-md"
-          }
-        `}
-      >
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        {message.error && (
-          <span className="text-xs text-red-600 block mt-1">
-            Failed to send
-          </span>
-        )}
-        <span
+      <div className="relative">
+        <div
           className={`
-            text-xs mt-1 block
-            ${message.error ? "text-red-400" : isUser ? "text-primary-200" : "text-[var(--text-muted)]"}
+            max-w-[80%] rounded-2xl px-4 py-3
+            ${
+              message.error
+                ? "bg-red-900/30 border border-red-700 text-red-300 rounded-br-md"
+                : isUser
+                  ? "bg-primary-500 text-white rounded-br-md"
+                  : "bg-[var(--bg-elevated)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-bl-md"
+            }
           `}
         >
-          {formattedTime}
-        </span>
+          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          {message.error && (
+            <span className="text-xs text-red-600 block mt-1">
+              Failed to send
+            </span>
+          )}
+          <span
+            className={`
+              text-xs mt-1 block
+              ${message.error ? "text-red-400" : isUser ? "text-primary-200" : "text-[var(--text-muted)]"}
+            `}
+          >
+            {formattedTime}
+          </span>
+        </div>
+        {onDelete && (
+          <button
+            onClick={handleDelete}
+            className={`
+              absolute top-1 opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded
+              hover:bg-red-500/20 transition-all
+              ${isUser ? "left-[-28px]" : "right-[-28px]"}
+            `}
+            title="メッセージを削除"
+            aria-label="メッセージを削除"
+          >
+            <TrashIcon className="w-4 h-4 text-red-400 hover:text-red-300" />
+          </button>
+        )}
       </div>
     </div>
   );
