@@ -20,7 +20,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf packages/*/dist packages/*/.turbo node_modules/.cache"
+    "clean": "rm -rf packages/*/dist packages/*/.turbo node_modules/.cache",
+    "worker:start": "node plugin/scripts/worker-start.js",
+    "worker:stop": "node plugin/scripts/worker-stop.js",
+    "worker:status": "node plugin/scripts/worker-status.js"
   },
   "devDependencies": {
     "@types/bun": "^1.1.14",
