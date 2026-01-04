@@ -1,79 +1,64 @@
 ---
 name: cnthub:get
-description: Retrieve and inject context from past completed sessions
+description: 過去のセッションからコンテキストを取得
 ---
 
-# /cnthub:get - Context Retrieval Command
+# /cnthub:get
 
-This command retrieves context from past completed and merged sessions and injects it into the current conversation.
+過去の完了済みセッションからコンテキストを取得し、現在の会話に注入する。
 
-## Usage
-
-When the user invokes `/cnthub:get`, follow this workflow:
-
-### Step 1: Fetch Available Sessions
-
-Use the MCP tool `list_sessions` to get completed and merged sessions:
+## 使い方
 
 ```
-Tool: list_sessions
-Arguments: { "limit": 20 }
+/cnthub:get          # リストから選択
+/cnthub:get last     # 直近1件を自動取得
+/cnthub:get last N   # 直近N件を自動取得
 ```
 
-Note: Filter to show only `completed` and `merged` status sessions.
+## MCP ツール
 
-### Step 2: Display Session List
+- `list_sessions` - セッション一覧取得
+- `inject_context` - コンテキスト注入
 
-Present the sessions as a numbered list. Format each entry as:
-- `[DATE]` - Session creation date (YYYY-MM-DD)
-- `[STATUS]` - Session status (`completed` or `merged`)
-- `Session Name` - The session name
-- `Brief summary...` - First 50 characters of summary preview (if available)
+## 出力フォーマット
 
-### Step 3: Wait for User Selection
-
-Wait for the user to specify which sessions they want. Accept:
-- Single number: `1`
-- Multiple numbers: `1,2,3` or `1, 2, 3`
-- Range: `1-3`
-- All sessions: `all`
-
-### Step 4: Retrieve Session Details
-
-For each selected session, use the MCP tool `inject_context`:
-
-```
-Tool: inject_context
-Arguments: { "sessionIds": ["ch_ss_0001", "ch_ss_0002"], "format": "summary" }
-```
-
-### Step 5: Output Context
-
-Format and display the retrieved context:
+### リスト表示
 
 ```markdown
-# Related Context
+# 利用可能なセッション (完了済み/マージ済み)
 
-## Session: {Session Name} ({Date})
-{Summary content}
+| # | 日付 | ステータス | セッション名 |
+|---|------|-----------|-------------|
+| 1 | YYYY-MM-DD | completed | セッション名 |
+| 2 | YYYY-MM-DD | merged | セッション名 |
 
-Key Decisions:
-- Decision 1
-- Decision 2
-
-Files Modified:
-- path/to/file1.ts
-- path/to/file2.ts
-
----
-
-## Session: {Another Session Name} ({Date})
-{Summary content}
-...
+取得するセッションを選択してください:
+- 単一: `1`
+- 複数: `1,2,3`
+- 範囲: `1-3`
+- 全て: `all`
 ```
 
-## Error Handling
+### コンテキスト出力
 
-- If no completed or merged sessions exist, inform the user: "No completed or merged sessions found. Complete a session first to use context injection."
-- If API is unavailable, inform the user: "cnthub API is not available. Ensure the cnthub server is running on port 3048."
-- If a specific session fails to load, continue with other sessions and note the failure.
+```markdown
+# 関連コンテキスト
+
+## セッション: {セッション名} ({日付})
+{要約}
+
+---
+```
+
+### Quick Retrieval (last)
+
+```markdown
+直近N件のセッションを自動取得しました。
+
+[コンテキスト出力]
+```
+
+## エラー
+
+- セッションなし: 「完了済みまたはマージ済みのセッションがありません。」
+- API利用不可: 「cnthub APIが利用できません。サーバーがポート3048で起動していることを確認してください。」
