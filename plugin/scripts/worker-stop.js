@@ -14,7 +14,7 @@ async function main() {
   const status = await getServerStatus();
 
   if (!status.isRunning) {
-    console.log("[cnthub] Server is not running");
+    console.log("[cnthub] Server is already stopped");
     process.exit(0);
   }
 
@@ -26,7 +26,12 @@ async function main() {
     console.log("[cnthub] Server stopped successfully");
     process.exit(0);
   } else {
-    console.error("[cnthub] Failed to stop server");
+    console.error("[cnthub] Failed to stop server gracefully");
+    if (status.pid) {
+      console.error("");
+      console.error("Manual stop:");
+      console.error(`  kill -9 ${status.pid}`);
+    }
     process.exit(1);
   }
 }

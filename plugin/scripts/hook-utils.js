@@ -51,7 +51,10 @@ function loadConfig() {
     try {
       const content = fs.readFileSync(CONFIG_FILE, "utf-8");
       cachedConfig = { ...DEFAULT_CONFIG, ...JSON.parse(content) };
-    } catch {
+    } catch (error) {
+      console.error(
+        `[cnthub] Failed to parse config: ${getErrorMessage(error)}`
+      );
       cachedConfig = { ...DEFAULT_CONFIG };
     }
   } else {
@@ -178,8 +181,6 @@ function isValidTranscriptPath(filePath) {
   if (!filePath || typeof filePath !== "string") {
     return false;
   }
-
-  const fs = require("fs");
 
   // 基本的なパス正規化
   const normalized = path.resolve(filePath);
@@ -358,10 +359,17 @@ async function startServer() {
  * @returns {number|null} PID またはnull
  */
 function findProcessByPort(port) {
+  // ポート番号のバリデーション（コマンドインジェクション対策）
+  const portNum = parseInt(port, 10);
+  if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+    console.error(`[cnthub] Invalid port number: ${port}`);
+    return null;
+  }
+
   try {
     const { execSync } = require("child_process");
     // macOS/Linux: lsof でポートを使用しているプロセスを検索
-    const output = execSync(`lsof -ti:${port} 2>/dev/null`, {
+    const output = execSync(`lsof -ti:${portNum} 2>/dev/null`, {
       encoding: "utf-8",
     });
     const pid = parseInt(output.trim().split("\n")[0], 10);
