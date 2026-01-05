@@ -461,7 +461,9 @@ const SessionItem = memo(function SessionItem({
           ? "bg-[var(--color-primary-500)]/20"
           : isHidden
             ? "opacity-50"
-            : "hover:bg-[var(--bg-elevated)]")
+            : session.status === "processing"
+              ? "border border-[var(--color-primary-400)] bg-[var(--color-primary-400)]/5 hover:bg-[var(--color-primary-400)]/10"
+              : "hover:bg-[var(--bg-elevated)]")
       }
     >
       {bulkSelectMode ? (
