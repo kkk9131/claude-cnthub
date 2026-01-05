@@ -350,19 +350,26 @@ export function ViewerSidebar({
           </div>
         ) : (
           <div className="px-2 space-y-1">
-            {sessions.map((session) => (
-              <SessionItem
-                key={session.sessionId}
-                session={session}
-                isHidden={selectedSessionIds.includes(session.sessionId)}
-                onToggle={onSessionSelect}
-                onClick={onSessionClick}
-                onDelete={onSessionDelete}
-                bulkSelectMode={bulkSelectMode}
-                isBulkSelected={bulkSelectedIds.has(session.sessionId)}
-                onBulkToggle={handleBulkToggle}
-              />
-            ))}
+            {sessions.map((session) => {
+              const project = projects.find(
+                (p) => p.projectId === session.projectId
+              );
+              return (
+                <SessionItem
+                  key={session.sessionId}
+                  session={session}
+                  isHidden={selectedSessionIds.includes(session.sessionId)}
+                  onToggle={onSessionSelect}
+                  onClick={onSessionClick}
+                  onDelete={onSessionDelete}
+                  bulkSelectMode={bulkSelectMode}
+                  isBulkSelected={bulkSelectedIds.has(session.sessionId)}
+                  onBulkToggle={handleBulkToggle}
+                  projectName={project?.name}
+                  showProjectBadge={!selectedProjectId}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -385,6 +392,8 @@ interface SessionItemProps {
   bulkSelectMode?: boolean;
   isBulkSelected?: boolean;
   onBulkToggle?: (sessionId: string) => void;
+  projectName?: string;
+  showProjectBadge?: boolean;
 }
 
 const statusColors = {
@@ -404,6 +413,8 @@ const SessionItem = memo(function SessionItem({
   bulkSelectMode = false,
   isBulkSelected = false,
   onBulkToggle,
+  projectName,
+  showProjectBadge = false,
 }: SessionItemProps) {
   const handleToggle = useCallback(
     (e: React.MouseEvent) => {
@@ -502,8 +513,13 @@ const SessionItem = memo(function SessionItem({
           >
             {session.name}
           </div>
-          <div className="text-xs text-[var(--text-muted)]">
-            {formattedDate}
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <span>{formattedDate}</span>
+            {showProjectBadge && projectName && (
+              <span className="px-1.5 py-0.5 bg-[var(--bg-elevated)] rounded text-[10px] truncate max-w-[80px]">
+                {projectName}
+              </span>
+            )}
           </div>
         </div>
       </button>
