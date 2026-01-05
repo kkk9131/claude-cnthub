@@ -26,6 +26,7 @@ const {
   sendToAPI,
   getErrorMessage,
   ensureServerRunning,
+  ensureWebRunning,
 } = require("./hook-utils");
 
 async function main() {
@@ -43,6 +44,9 @@ async function main() {
       );
       process.exit(0);
     }
+
+    // Webフロントエンドも起動（設定でautoStart: trueの場合）
+    await ensureWebRunning();
 
     // Session registration only (context injection moved to UserPromptSubmit hook)
     const response = await sendToAPI("/hook/session-start", {

@@ -13,12 +13,18 @@ const HOME_DIR = process.env.HOME || process.env.USERPROFILE || "";
 const CONFIG_DIR = path.join(HOME_DIR, ".claude-cnthub");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 const PID_FILE = path.join(CONFIG_DIR, "server.pid");
+const WEB_PID_FILE = path.join(CONFIG_DIR, "web.pid");
 
 // デフォルト設定
 const DEFAULT_CONFIG = {
   api: {
     port: 3048,
     host: "localhost",
+  },
+  web: {
+    port: 5173,
+    host: "localhost",
+    autoStart: true,
   },
   worker: {
     autoStart: true,
@@ -511,12 +517,221 @@ async function ensureServerRunning() {
   return false;
 }
 
+// ============================================
+// Web Frontend Functions
+// ============================================
+
+/**
+ * Web PID ファイルを保存
+ * @param {number} pid - プロセスID
+ */
+function saveWebPid(pid) {
+  ensureConfigDir();
+  fs.writeFileSync(WEB_PID_FILE, String(pid));
+}
+
+/**
+ * Web PID ファイルを読み込む
+ * @returns {number|null} PID またはnull
+ */
+function loadWebPid() {
+  if (!fs.existsSync(WEB_PID_FILE)) return null;
+  try {
+    const pid = parseInt(fs.readFileSync(WEB_PID_FILE, "utf-8").trim(), 10);
+    return isNaN(pid) ? null : pid;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Web PID ファイルを削除
+ */
+function removeWebPid() {
+  if (fs.existsSync(WEB_PID_FILE)) {
+    fs.unlinkSync(WEB_PID_FILE);
+  }
+}
+
+/**
+ * Web フロントエンドのヘルスチェック
+ * @returns {Promise<boolean>} 起動している場合 true
+ */
+async function checkWebHealth() {
+  const webConfig = config.web || DEFAULT_CONFIG.web;
+  const webUrl = `http://${webConfig.host}:${webConfig.port}`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      HEALTH_CHECK_TIMEOUT
+    );
+
+    const response = await fetch(webUrl, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    return response.ok || response.status === 304;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Web フロントエンドをバックグラウンドで起動
+ * @returns {Promise<boolean>} 起動成功の場合 true
+ */
+async function startWeb() {
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.dirname(__dirname);
+  const projectRoot = path.resolve(pluginRoot, "..");
+  const webDir = path.join(projectRoot, "packages", "web");
+
+  console.error(`[cnthub] Starting Web frontend from: ${webDir}`);
+
+  try {
+    const child = spawn("bun", ["run", "dev"], {
+      cwd: webDir,
+      detached: true,
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+      },
+    });
+
+    child.unref();
+
+    if (child.pid) {
+      saveWebPid(child.pid);
+    }
+
+    console.error(`[cnthub] Web frontend process spawned (PID: ${child.pid})`);
+    return true;
+  } catch (error) {
+    console.error(`[cnthub] Failed to start web: ${getErrorMessage(error)}`);
+    return false;
+  }
+}
+
+/**
+ * Web フロントエンドを停止
+ * @returns {Promise<boolean>} 停止成功の場合 true
+ */
+async function stopWeb() {
+  const webConfig = config.web || DEFAULT_CONFIG.web;
+  let pid = loadWebPid();
+
+  if (!pid) {
+    if (await checkWebHealth()) {
+      pid = findProcessByPort(webConfig.port);
+      if (pid) {
+        console.error(
+          `[cnthub] Found web on port ${webConfig.port} (PID: ${pid})`
+        );
+      } else {
+        console.error("[cnthub] Web is running but could not find PID");
+        return false;
+      }
+    } else {
+      console.error("[cnthub] Web is not running");
+      return true;
+    }
+  }
+
+  if (!isProcessRunning(pid)) {
+    console.error("[cnthub] Web process not found, cleaning up PID file");
+    removeWebPid();
+    return true;
+  }
+
+  try {
+    process.kill(pid, "SIGTERM");
+    console.error(`[cnthub] Sent SIGTERM to web process ${pid}`);
+
+    for (let i = 0; i < 10; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (!isProcessRunning(pid)) {
+        removeWebPid();
+        console.error("[cnthub] Web stopped successfully");
+        return true;
+      }
+    }
+
+    process.kill(pid, "SIGKILL");
+    removeWebPid();
+    console.error("[cnthub] Web force killed");
+    return true;
+  } catch (error) {
+    console.error(`[cnthub] Failed to stop web: ${getErrorMessage(error)}`);
+    return false;
+  }
+}
+
+/**
+ * Web フロントエンドが起動するまで待機
+ * @param {number} [timeout=SERVER_STARTUP_TIMEOUT] - 最大待機時間（ミリ秒）
+ * @returns {Promise<boolean>} 起動成功の場合 true
+ */
+async function waitForWeb(timeout = SERVER_STARTUP_TIMEOUT) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    if (await checkWebHealth()) {
+      return true;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, SERVER_STARTUP_INTERVAL)
+    );
+  }
+
+  return false;
+}
+
+/**
+ * Web フロントエンドが起動していることを保証
+ * @returns {Promise<boolean>} 利用可能な場合 true
+ */
+async function ensureWebRunning() {
+  const webConfig = config.web || DEFAULT_CONFIG.web;
+
+  // 自動起動が無効の場合はスキップ
+  if (!webConfig.autoStart) {
+    console.error("[cnthub] Web auto-start is disabled");
+    return false;
+  }
+
+  // 既に起動しているか確認
+  if (await checkWebHealth()) {
+    console.error("[cnthub] Web frontend is already running");
+    return true;
+  }
+
+  console.error("[cnthub] Web frontend not running, starting...");
+
+  const started = await startWeb();
+  if (!started) {
+    return false;
+  }
+
+  const ready = await waitForWeb();
+  if (ready) {
+    console.error("[cnthub] Web frontend is now ready");
+    return true;
+  }
+
+  console.error("[cnthub] Web frontend failed to start within timeout");
+  return false;
+}
+
 module.exports = {
   API_URL,
   FETCH_TIMEOUT,
   CONFIG_DIR,
   CONFIG_FILE,
   PID_FILE,
+  WEB_PID_FILE,
   readHookContext,
   validateHookContext,
   fetchWithTimeout,
@@ -529,4 +744,8 @@ module.exports = {
   ensureServerRunning,
   stopServer,
   getServerStatus,
+  // Web frontend functions
+  checkWebHealth,
+  ensureWebRunning,
+  stopWeb,
 };

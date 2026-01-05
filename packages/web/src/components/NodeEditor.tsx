@@ -103,6 +103,66 @@ function findNonOverlappingPosition(
   return pos;
 }
 
+// グリッド配置で重ならない位置を計算
+function calculateGridPosition(
+  index: number,
+  existingNodes: Node[],
+  nodeType: "session" | "context"
+): { x: number; y: number } {
+  const cols = 4; // 4列のグリッド
+  const rowSpacing = nodeType === "context" ? 180 : 100;
+  const colSpacing = nodeType === "context" ? 280 : 220;
+  const startX = nodeType === "context" ? 500 : 50;
+  const startY = 80;
+
+  // 基本的なグリッド位置
+  let baseX = startX + (index % cols) * colSpacing;
+  let baseY = startY + Math.floor(index / cols) * rowSpacing;
+
+  // 既存ノードとの衝突をチェック
+  const tempNode: Node = {
+    id: "temp",
+    type: nodeType,
+    position: { x: baseX, y: baseY },
+    data: {},
+  };
+
+  let attempts = 0;
+  const maxAttempts = 100;
+
+  while (attempts < maxAttempts) {
+    let hasCollision = false;
+    for (const other of existingNodes) {
+      if (checkCollision(tempNode, other)) {
+        hasCollision = true;
+        break;
+      }
+    }
+
+    if (!hasCollision) {
+      return tempNode.position;
+    }
+
+    // 衝突した場合、次の位置を試す（スパイラル状に探索）
+    const spiralIndex = attempts + 1;
+    const spiralCol = spiralIndex % cols;
+    const spiralRow = Math.floor(spiralIndex / cols);
+
+    tempNode.position = {
+      x: startX + spiralCol * colSpacing,
+      y: startY + spiralRow * rowSpacing,
+    };
+
+    attempts++;
+  }
+
+  // 最大試行回数に達した場合、右下に配置
+  return {
+    x: startX + (attempts % cols) * colSpacing,
+    y: startY + Math.floor(attempts / cols) * rowSpacing,
+  };
+}
+
 // localStorage ヘルパー関数
 function loadPositions(): StoredPositions {
   try {
@@ -435,22 +495,30 @@ export function NodeEditor({
 
       // 新しいcontextノードを生成
       const newContextNodes: Node[] = [];
-      currentSessionsData.forEach((data, index) => {
+      // 衝突検出用の既存ノードリスト
+      let allNodesForCollision = [...nds];
+      let newContextIndex = 0;
+
+      currentSessionsData.forEach((data) => {
         const session = data.session;
         if (!session) return;
 
         const nodeId = `context-${session.sessionId}`;
         const savedPosition = positions[nodeId];
-        const defaultPosition = {
-          x: 400,
-          y: 100 + index * 180,
-        };
+        // 保存された位置がなければ、衝突しない位置を計算
+        const calculatedPosition = savedPosition
+          ? savedPosition
+          : calculateGridPosition(
+              newContextIndex,
+              allNodesForCollision,
+              "context"
+            );
 
         if (!existingContextIds.has(nodeId)) {
-          newContextNodes.push({
+          const newNode: Node = {
             id: nodeId,
             type: "context",
-            position: savedPosition || defaultPosition,
+            position: calculatedPosition,
             data: {
               label: "進行中セッション",
               sessionId: session.sessionId,
@@ -463,7 +531,11 @@ export function NodeEditor({
               mergeStatus,
               mergedSummary,
             },
-          });
+          };
+          newContextNodes.push(newNode);
+          // 次のノードの衝突チェック用に追加
+          allNodesForCollision = [...allNodesForCollision, newNode];
+          newContextIndex++;
         }
       });
 
@@ -531,27 +603,34 @@ export function NodeEditor({
     mergedSummary,
   ]);
 
-  // セッション一覧からノードを生成（保存された位置を復元）
+  // セッション一覧からノードを生成（保存された位置を復元、重複回避）
   useEffect(() => {
     setNodes((nds) => {
       const existingIds = new Set(nds.map((n) => n.id));
       const newSessionNodes: Node[] = [];
       const positions = storedPositions.current;
 
-      sessions.forEach((session, index) => {
+      // 新しいノードを追加する前の全ノード（重複チェック用）
+      let allNodesForCollision = [...nds];
+      let newNodeIndex = 0;
+
+      sessions.forEach((session) => {
         const nodeId = "session-" + session.sessionId;
         if (!existingIds.has(nodeId)) {
-          // 保存された位置があれば使用、なければデフォルト位置
+          // 保存された位置があれば使用、なければ重複しない位置を計算
           const savedPosition = positions[nodeId];
-          const defaultPosition = {
-            x: 50 + Math.floor(index / 5) * 200,
-            y: 80 + (index % 5) * 100,
-          };
+          const calculatedPosition = savedPosition
+            ? savedPosition
+            : calculateGridPosition(
+                newNodeIndex,
+                allNodesForCollision,
+                "session"
+              );
 
-          newSessionNodes.push({
+          const newNode: Node = {
             id: nodeId,
             type: "session",
-            position: savedPosition || defaultPosition,
+            position: calculatedPosition,
             data: {
               label: session.name,
               sessionId: session.sessionId,
@@ -559,7 +638,12 @@ export function NodeEditor({
               date: new Date(session.updatedAt).toLocaleDateString("ja-JP"),
               tokenCount: session.tokenCount,
             },
-          });
+          };
+
+          newSessionNodes.push(newNode);
+          // 次のノードの衝突チェック用に追加
+          allNodesForCollision = [...allNodesForCollision, newNode];
+          newNodeIndex++;
         }
       });
 
