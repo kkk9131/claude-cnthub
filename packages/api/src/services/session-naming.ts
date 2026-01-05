@@ -11,7 +11,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
  * メッセージからのセッション命名オプション
  */
 export interface MessageNamingOptions {
-  /** 最大文字数（デフォルト: 50） */
+  /** 最大文字数（デフォルト: 15） */
   maxLength?: number;
   /** AIを使用するか（デフォルト: true） */
   useAI?: boolean;
@@ -71,13 +71,13 @@ function extractFirstMeaningfulLine(message: string): string {
 /**
  * フォールバック: AIを使わずにメッセージからセッション名を生成
  *
- * メッセージの先頭 50 文字（または指定された maxLength）をセッション名として使用
+ * メッセージの先頭 15 文字（または指定された maxLength）をセッション名として使用
  */
 export function generateNameFromMessageFallback(
   message: string,
   options: MessageNamingOptions = {}
 ): string {
-  const { maxLength = 50 } = options;
+  const { maxLength = 15 } = options;
 
   // メッセージが空の場合
   const trimmed = message.trim();
@@ -104,17 +104,17 @@ export function generateNameFromMessageFallback(
  * AIプロンプトを構築
  */
 function buildNamingPrompt(message: string): string {
-  return `以下のユーザーメッセージから、簡潔で分かりやすいセッション名を1つ生成してください。
+  return `以下のユーザーメッセージから、簡潔なセッション名を1つ生成してください。
 
 ## ユーザーメッセージ
 ${message}
 
 ## ルール
-- 日本語または英語で20-40文字程度
-- メッセージの主要な意図や目的を反映した名前
-- 動詞で始まる場合は名詞形にする（例: "implement" → "Implementation"）
+- 15文字以内で簡潔に
+- メッセージが日本語なら日本語、英語なら英語で
+- 主要な意図を端的に表現（例: 「認証実装」「バグ修正」「UI改善」）
 - 特殊文字は使わない
-- コードや技術的な詳細は含めない
+- 名詞形で出力
 
 セッション名:`;
 }
@@ -145,7 +145,7 @@ export async function generateNameFromMessage(
   message: string,
   options: MessageNamingOptions = {}
 ): Promise<string> {
-  const { maxLength = 50, useAI = true } = options;
+  const { maxLength = 15, useAI = true } = options;
 
   // メッセージが空の場合
   const trimmed = message.trim();

@@ -19,16 +19,16 @@ describe("Session Naming Service (API-02)", () => {
       const name = generateNameFromMessageFallback(message);
 
       expect(name.length).toBeGreaterThan(0);
-      expect(name.length).toBeLessThanOrEqual(50);
+      expect(name.length).toBeLessThanOrEqual(15);
     });
 
-    it("should truncate long messages to 50 characters", () => {
+    it("should truncate long messages to 15 characters", () => {
       const longMessage =
         "これは非常に長いメッセージです。APIのエンドポイントを実装して、データベースとの連携を行い、フロントエンドとの通信も確立する必要があります。セキュリティ対策も忘れずに。";
 
       const name = generateNameFromMessageFallback(longMessage);
 
-      expect(name.length).toBeLessThanOrEqual(50);
+      expect(name.length).toBeLessThanOrEqual(15);
     });
 
     it("should respect custom maxLength option", () => {
@@ -89,7 +89,7 @@ describe("Session Naming Service (API-02)", () => {
       const name = generateNameFromMessageFallback(message);
 
       expect(name.length).toBeGreaterThan(0);
-      expect(name.length).toBeLessThanOrEqual(50);
+      expect(name.length).toBeLessThanOrEqual(15);
     });
   });
 
@@ -101,7 +101,7 @@ describe("Session Naming Service (API-02)", () => {
 
       expect(name).toBeDefined();
       expect(name.length).toBeGreaterThan(0);
-      expect(name.length).toBeLessThanOrEqual(50);
+      expect(name.length).toBeLessThanOrEqual(15);
     });
 
     it("should respect maxLength option", async () => {
@@ -131,7 +131,7 @@ Third line continues`;
 
       expect(name).toBeDefined();
       expect(name.length).toBeGreaterThan(0);
-      expect(name.length).toBeLessThanOrEqual(50);
+      expect(name.length).toBeLessThanOrEqual(15);
     });
 
     it("should handle message with code blocks", async () => {
@@ -146,7 +146,7 @@ function test() {
 
       expect(name).toBeDefined();
       expect(name.length).toBeGreaterThan(0);
-      expect(name.length).toBeLessThanOrEqual(50);
+      expect(name.length).toBeLessThanOrEqual(15);
     });
   });
 
