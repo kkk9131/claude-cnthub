@@ -7,6 +7,7 @@ export * from "./types/project";
 export * from "./types/session-index";
 export * from "./types/summary";
 export * from "./types/merge";
+export * from "./types/system-context";
 
 // Constants
 export * from "./constants";

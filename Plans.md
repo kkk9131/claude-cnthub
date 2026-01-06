@@ -1,196 +1,135 @@
 # Plans.md - claude-cnthub 開発計画
 
-> 最終更新: 2026-01-05
-> ビジョン: LLM セッションの永続化・コンテキスト共有・クロスLLM連携プラットフォーム
-> 要件定義: [07-plugin-requirements.md](./Agent-docs/07-plugin-requirements.md)
+> 最終更新: 2026-01-07
+> ビジョン: Claude Code の「最適化エンジン」- セッション・システムコンテキストの可視化・操作・AI最適化
 
-## 概要
+## コンセプト
 
 ```
-Phase 1: Claude Code Plugin
-──────────────────────────────────────────────────
-Claude Code CLI
-      │
-      ├── SessionStart Hook → セッション登録のみ
-      ├── UserPromptSubmit Hook → コンテキスト注入 + セッション名生成 (R-07)
-      ├── PostToolUse Hook → リアルタイム観測 (R-02)
-      └── SessionEnd Hook → 要約・Embedding (R-01, R-04, R-05)
-              │
-              ▼
-        Backend API (Port 3048)
-              │
-              ├── 検索 (sqlite-vec + SQL) (R-06)
-              └── Viewer UI (R-10〜R-12)
+lovcode:       Claude Code の「ビューア」（見るだけ）
+claude-cnthub: Claude Code の「最適化エンジン」（見る + 操作 + AI最適化）
+```
+
+| 機能 | lovcode | claude-cnthub |
+|------|---------|---------------|
+| セッション閲覧 | ✅ | ✅ |
+| システム設定閲覧 | ✅（手動） | ✅ + **AI最適化** |
+| コンテキスト注入 | ❌ | ✅ |
+| 最適化提案・実行 | ❌ | ✅（Agent SDK） |
+
+### 核心的価値：段階的開示
+
+```
+問題: 全部最初に読み込む → コンテキスト肥大化 → 効率低下
+解決: 必要な時に必要なものだけ開示 → コンテキスト最適化
 ```
 
 ---
 
-## 完了済み
+## コマンド体系
 
-<details>
-<summary>完了済みタスク（クリックで展開）</summary>
-
-### 基盤・コア機能 ✅
-- [x] モノレポ構成、共通型定義、SQLite、Hono API
-- [x] セッション CRUD、メッセージ管理、WebSocket、AI要約
-- [x] sqlite-vec ベクトル検索、セマンティック検索
-
-### プロジェクト管理 ✅
-- [x] P-01: Project 型定義・DB スキーマ
-- [x] P-02: プロジェクト CRUD API
-- [x] P-03: セッション→プロジェクト自動紐付け
-
-### サーバー統合 ✅
-- [x] I-01: サーバー統合 (Port 3048)
-- [x] I-02: Memory API シンプル化
-- [x] I-03: 新セッション ID 体系 (`ch_ss_0001`)
-- [x] I-04: ローカル Embedding フォールバック
-
-### Phase 1: Plugin 機能実装 ✅
-- [x] H-01: PostToolUse Hook（リアルタイム観測記録）
-- [x] H-02: SessionEnd 要約→タイトル→Embedding 連鎖
-- [x] H-03: SessionStart コンテキスト注入
-- [x] CMD-01: `/cnthub:get` - 過去セッション取得
-- [x] CMD-02: `/cnthub:export` - 現在セッション書き出し
-- [x] V-01〜V-03: Viewer UI（基盤・一覧・ノードエディタ）
-
-### Phase 1.5: Smart Export ✅
-- [x] SE-01: AI グルーピング API
-- [x] SE-02: グループ選択 UI
-- [x] SE-03: Export & 削除 API
-- [x] SE-04: UI 統合
-
-### Phase 1.6: Context Management 強化 ✅
-- [x] API-01: pending_inject API
-- [x] API-02: セッション名生成 API
-- [x] HOOK-01: SessionStart 改修（コンテキスト注入削除）
-- [x] HOOK-02: SessionEnd 改修（タイトル生成スキップ）
-- [x] HOOK-03: UserPromptSubmit Hook 新規作成
-- [x] CMD-01: /cnthub:export 改修（コンテキスト削減対応）
-- [x] CMD-02: /cnthub:get 改修（merged ステータス対応）
-
-</details>
+```
+/cnthub:
+├── get              # 過去セッションから注入
+├── export           # 現在のやり取りを保存
+├── optimize         # 全体最適化
+├── optimize:skills  # Skills 最適化
+├── optimize:hooks   # Hooks 最適化
+├── optimize:mcp     # MCP → Skill 化
+└── optimize:rules   # ルール段階的開示化
+```
 
 ---
 
-## Phase 1.6.1: Context Management バグ修正 `cc:完了`
+## 完了済み ✅
 
-Phase 1.6 実装後に発見された問題の修正。
-
-| ID | タスク | 原因 | 状態 |
-|----|--------|------|------|
-| BUG-01 | MCP inject_context が summary を返さない | API が summary を含まない | `cc:完了` |
-| BUG-02 | セッション名が UUID のまま更新されない | API が UUID を受け付けない | `cc:完了` |
-| BUG-03 | セッション一覧に重複名が多い | Export 時の名前重複 | `cc:完了` |
-| CLN-01 | 不要セッションのクリーンアップ機能 | - | `cc:完了` |
-
-### 修正内容
-- **BUG-01**: MCP の `injectContext` で `/sessions/:id/summary` も並列で取得
-- **BUG-02**: `getSessionById()` を修正し、`ch_ss_xxxx` と UUID 両方で検索可能に
-- **BUG-03**: Export 時のセッション名にタイムスタンプを追加して重複回避
-- **CLN-01**: `POST /api/sessions/bulk-delete` で一括削除 API を追加
-
-詳細は [TASKS.md](./TASKS.md#phase-161-context-management-バグ修正) 参照
+Phase 1〜1.7 完了: 基盤構築、Plugin機能、Smart Export、Context Management、UI統合
+詳細は [ARCHIVE.md](./ARCHIVE.md) 参照
 
 ---
 
-## Phase 1.7: UI統合 `cc:TODO`
+## Phase 2: System Context 可視化 `pm:TODO`
 
-> 目的: 実装済みAPI機能をUIに反映し、未実装APIのUI部分を削除
-
-### 概要
-
-```
-削除対象（APIが未実装）:
-├── Work Items ページ全体
-├── workItemStore.ts
-└── マイルストーン・ブロッカー関連UI
-
-追加対象（APIは実装済み）:
-├── プロジェクト管理 CRUD UI
-├── セッション一括削除 UI
-├── メッセージ削除 UI
-└── マージ削除 UI
-
-整理対象:
-├── Settings ページ（削除）
-├── メモリAPI表示（将来検討）
-└── 未使用コンポーネント整理
-```
-
-### タスク一覧
+> 目的: Skills, Hooks, MCP, Rules をノードビューで可視化
 
 | ID | タスク | 優先度 | 状態 |
 |----|--------|--------|------|
-| UI-DEL-01 | Work Items 関連ファイル削除 | 🔴 High | `cc:TODO` |
-| UI-DEL-02 | Settings ナビゲーション削除 | 🟡 Medium | `cc:TODO` |
-| UI-ADD-01 | セッション一括削除 UI | 🔴 High | `cc:TODO` |
-| UI-ADD-02 | プロジェクト管理 UI | 🟡 Medium | `cc:TODO` |
-| UI-ADD-03 | メッセージ削除 UI | 🟢 Low | `cc:TODO` |
-| UI-ADD-04 | マージ削除 UI | 🟢 Low | `cc:TODO` |
-| UI-FIX-01 | セッション詳細ポップアップ改善 | 🟡 Medium | `cc:TODO` |
-| UI-FIX-02 | テーマ永続化（localStorage） | 🟢 Low | `cc:TODO` |
-
-詳細は [TASKS.md](./TASKS.md#phase-17-ui統合) 参照
+| SYS-01 | System Context 読み取り API | 🔴 High | `cc:完了` |
+| SYS-02 | Skills 一覧取得 | 🔴 High | `cc:完了` |
+| SYS-03 | Hooks 一覧取得 | 🔴 High | `cc:完了` |
+| SYS-04 | MCP Servers 一覧取得 | 🟡 Medium | `cc:完了` |
+| SYS-05 | CLAUDE.md / Rules 読み取り | 🟡 Medium | `cc:完了` |
+| SYS-06 | UI: Sessions/System 切り替えタブ | 🔴 High | `pm:TODO` |
+| SYS-07 | UI: System ノードビュー | 🔴 High | `pm:TODO` |
+| SYS-08 | UI: プロジェクト接続（共有）機能 | 🟡 Medium | `pm:TODO` |
 
 ---
 
-## Phase 2: Cross-LLM 連携 `将来`
+## Phase 3: 最適化エージェント `pm:TODO`
 
-<details>
-<summary>Phase 2 タスク（クリックで展開）</summary>
+> 目的: Claude Agent SDK で設定ファイルを分析・最適化
 
-### Profile System
-| ID | タスク | 依存 |
-|----|--------|------|
-| PF-01 | project_profiles テーブル | P-01 |
-| PF-02 | Static/Dynamic Facts API | PF-01 |
-| PF-03 | Dynamic Facts 自動更新 | PF-02 |
+```
+[最適化] → 調査 → プラン提示 → 承認 → 実行 → 確認/ロールバック
+```
 
-### LLM 接続
-| ID | タスク | 依存 |
-|----|--------|------|
-| L-01 | LLM 接続設定 DB スキーマ | - |
-| L-02 | ChatGPT Adapter | L-01 |
-| L-03 | Codex Adapter | L-01 |
-| L-04 | 接続管理 API | L-01 |
-
-</details>
+| ID | タスク | 優先度 | 状態 |
+|----|--------|--------|------|
+| OPT-01 | 最適化エージェント基盤 | 🔴 High | `pm:TODO` |
+| OPT-02 | Skills 分析・統合提案 | 🔴 High | `pm:TODO` |
+| OPT-03 | Hooks 効率化提案 | 🟡 Medium | `pm:TODO` |
+| OPT-04 | MCP → Skill 化変換 | 🟡 Medium | `pm:TODO` |
+| OPT-05 | CLAUDE.md 段階的開示化 | 🔴 High | `pm:TODO` |
+| OPT-06 | UI: 最適化ボタン・プログレス | 🔴 High | `pm:TODO` |
+| OPT-07 | UI: プラン確認・承認フロー | 🔴 High | `pm:TODO` |
+| OPT-08 | UI: ロールバック機能 | 🟡 Medium | `pm:TODO` |
+| OPT-09 | CLI: /cnthub:optimize | 🟡 Medium | `pm:TODO` |
 
 ---
 
-## Context Management フロー（Phase 1.6.1 で修正中）
+## Phase 4: セッションコンテキスト強化 `pm:TODO`
 
+| ID | タスク | 優先度 | 状態 |
+|----|--------|--------|------|
+| CTX-01 | プロジェクト横断検索 | 🟡 Medium | `pm:TODO` |
+| CTX-02 | やり取りパターン保存・再現 | 🟢 Low | `pm:TODO` |
+| CTX-03 | コンテキスト圧縮・要約 | 🟢 Low | `pm:TODO` |
+
+---
+
+## Phase 5: Cross-LLM 連携 `将来`
+
+| ID | タスク | 状態 |
+|----|--------|------|
+| L-01 | ChatGPT Adapter | 将来 |
+| L-02 | Codex Adapter | 将来 |
+| L-03 | コンテキスト転送 UI | 将来 |
+
+---
+
+## 最適化知見
+
+### Skills 段階的開示
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Context Management フロー                                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  SessionStart                                                   │
-│       │                                                         │
-│       └─ (セッション登録のみ、コンテキスト注入なし)              │
-│                                                                 │
-│  UserPromptSubmit（初回メッセージ）                              │
-│       │                                                         │
-│       ├─ /cnthub:get → 手動選択（従来通り）                     │
-│       ├─ /cnthub:export → Smart Export（改修版）               │
-│       └─ 通常メッセージ → 自動検索 + additionalContext 注入     │
-│                                                                 │
-│  /cnthub:export 改修版                                          │
-│       │                                                         │
-│       ├─ Export 完了後、確認表示                                │
-│       │   「選択部分をコンテキストから取り除きますか？」         │
-│       │                                                         │
-│       ├─ Yes → 残り部分を backend 保存                          │
-│       │        ユーザーに /clear を促す                         │
-│       │                                                         │
-│       └─ /clear 後の次メッセージで残り部分を自動注入            │
-│                                                                 │
-│  SessionEnd                                                     │
-│       │                                                         │
-│       └─ 要約・Embedding のみ（タイトル生成スキップ）           │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+Before: CLAUDE.md に全 Skill 説明 → 毎回全部読み込み
+After:  Skill 名+1行説明のみ → 必要時だけ本体呼び出し
 ```
 
-詳細は [TASKS.md](./TASKS.md) 参照
+### MCP → Skill 化
+```
+Before: MCP 直接公開 → 全機能認識、コンテキスト消費
+After:  Skill でラップ → 必要時だけ Skill 経由で呼び出し
+```
+
+### CLAUDE.md 分割
+```
+Before: 巨大な単一ファイル
+After:  概要のみ + .claude/rules/*.md → 必要時だけ読み込み
+```
+
+---
+
+## 参照
+
+- [01-requirements.md](./Agent-docs/01-requirements.md) - 要件定義
+- [ARCHIVE.md](./ARCHIVE.md) - 完了済みタスク詳細

@@ -20,6 +20,8 @@ import { mergesRouter } from "./routes/merges";
 import { memoriesRouter, legacyMemoriesRouter } from "./routes/memories";
 import { projectsRouter } from "./routes/projects";
 import { injectRouter } from "./routes/inject";
+import { edgesRouter } from "./routes/edges";
+import { systemContextRouter } from "./routes/system-context";
 
 // Viewer UI の静的ファイルパスを解決
 const VIEWER_UI_PATH = resolve(join(__dirname, "../../../plugin/ui"));
@@ -81,6 +83,12 @@ export function createApp(): Hono {
 
   // Inject API（pending コンテキスト管理）
   newApp.route("/api/inject", injectRouter);
+
+  // Edges API（セッション間のエッジ管理）
+  newApp.route("/api/edges", edgesRouter);
+
+  // System Context API（Phase 2: System Context 可視化）
+  newApp.route("/api/system-context", systemContextRouter);
 
   // Viewer UI 静的配信 (R-10)
   // /viewer/* で plugin/ui/ の静的ファイルを配信

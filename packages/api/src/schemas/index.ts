@@ -248,3 +248,29 @@ export const ListMergesSchema = PaginationSchema.extend({
 });
 
 export type ListMergesQuery = z.infer<typeof ListMergesSchema>;
+
+// ==================== Edges ====================
+
+/**
+ * エッジ作成リクエスト
+ */
+export const CreateEdgeSchema = z.object({
+  sourceSessionId: z.string().min(1, "Source session ID is required"),
+  targetClaudeSessionId: z
+    .string()
+    .min(1, "Target Claude session ID is required"),
+});
+
+export type CreateEdgeRequest = z.infer<typeof CreateEdgeSchema>;
+
+// ==================== System Context ====================
+
+/**
+ * System Context クエリパラメータ
+ */
+export const SystemContextQuerySchema = z.object({
+  projectPath: z.string().optional(),
+  source: z.enum(["global", "project", "plugin", "all"]).default("all"),
+});
+
+export type SystemContextQuery = z.infer<typeof SystemContextQuerySchema>;
