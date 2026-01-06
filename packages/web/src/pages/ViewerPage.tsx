@@ -12,6 +12,7 @@ import { SmartExportModal } from "../components/SmartExportModal";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { SessionDetailModal } from "../components/SessionDetailModal";
 import { useTheme } from "../hooks/useTheme";
+import { useProjectStore } from "../stores/projectStore";
 import { MoonIcon, SunIcon } from "../components/icons";
 
 interface Session {
@@ -55,6 +56,7 @@ type MergeStatus = "idle" | "merging" | "completed" | "error";
 
 export function ViewerPage() {
   const { theme, toggleTheme } = useTheme();
+  const { selectedProjectId, projects } = useProjectStore();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [hiddenSessionIds, setHiddenSessionIds] = useState<string[]>([]);
   const [currentSessionsData, setCurrentSessionsData] = useState<
@@ -79,11 +81,15 @@ export function ViewerPage() {
     null
   );
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
+  const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
 
-  // エディタに表示するセッション（非表示を除外）
+  // エディタに表示するセッション（非表示を除外 + プロジェクトフィルタ）
   const visibleSessions = useMemo(
-    () => sessions.filter((s) => !hiddenSessionIds.includes(s.sessionId)),
-    [sessions, hiddenSessionIds]
+    () =>
+      sessions
+        .filter((s) => !hiddenSessionIds.includes(s.sessionId))
+        .filter((s) => !selectedProjectId || s.projectId === selectedProjectId),
+    [sessions, hiddenSessionIds, selectedProjectId]
   );
 
   // 完了済みセッションを取得
@@ -236,6 +242,36 @@ export function ViewerPage() {
       );
     }
   }, [deleteTarget]);
+
+  // 詳細モーダルからの直接削除
+  const handleDeleteFromDetail = useCallback(async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error?.message || "削除に失敗しました");
+      }
+
+      // ローカル状態を即座に更新
+      setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
+      setHiddenSessionIds((prev) => prev.filter((id) => id !== sessionId));
+    } catch (err) {
+      console.error("[ViewerPage] Failed to delete session:", err);
+      alert(
+        err instanceof Error ? err.message : "セッションの削除に失敗しました"
+      );
+    }
+  }, []);
+
+  // セッション名変更時にローカル状態を更新
+  const handleNameChange = useCallback((sessionId: string, newName: string) => {
+    setSessions((prev) =>
+      prev.map((s) => (s.sessionId === sessionId ? { ...s, name: newName } : s))
+    );
+  }, []);
 
   // セッション一括削除を実行 (UI-ADD-01)
   const handleBulkDelete = useCallback(async (sessionIds: string[]) => {
@@ -409,6 +445,7 @@ export function ViewerPage() {
           onSessionClick={handleSessionClick}
           onSessionDelete={handleSessionDeleteRequest}
           onBulkDelete={handleBulkDelete}
+          onSessionHover={setHoveredSessionId}
           selectedSessionIds={hiddenSessionIds}
         />
 
@@ -416,6 +453,7 @@ export function ViewerPage() {
         <main className="flex-1 overflow-hidden">
           <NodeEditor
             sessions={visibleSessions}
+            projects={projects}
             currentSessionsData={currentSessionsData}
             onGetSession={handleGetSession}
             onExportSession={handleExportSession}
@@ -425,6 +463,8 @@ export function ViewerPage() {
             onMerge={handleMerge}
             mergeStatus={mergeStatus}
             mergedSummary={mergedSummary}
+            onSessionDetail={(sessionId) => setDetailSessionId(sessionId)}
+            hoveredSessionId={hoveredSessionId}
           />
         </main>
       </div>
@@ -468,6 +508,8 @@ export function ViewerPage() {
         isOpen={!!detailSessionId}
         onClose={() => setDetailSessionId(null)}
         sessionId={detailSessionId}
+        onDelete={handleDeleteFromDetail}
+        onNameChange={handleNameChange}
       />
     </div>
   );

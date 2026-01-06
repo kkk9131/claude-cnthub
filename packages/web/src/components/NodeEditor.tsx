@@ -8,7 +8,7 @@
  * - ノード位置・エッジ・接続状態をlocalStorageで永続化
  */
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import {
   ReactFlow,
   Controls,
@@ -29,6 +29,22 @@ import "@xyflow/react/dist/style.css";
 const STORAGE_KEY_POSITIONS = "cnthub-node-positions";
 const STORAGE_KEY_EDGES = "cnthub-edges";
 const STORAGE_KEY_CONNECTED = "cnthub-connected-sessions";
+
+// API URL
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3048";
+
+// Edge API response type
+interface EdgeApiResponse {
+  edgeId: string;
+  sourceSessionId: string;
+  targetClaudeSessionId: string;
+  createdAt: string;
+}
+
+// Edge-to-backend mapping
+interface EdgeMapping {
+  [reactFlowEdgeId: string]: string; // reactFlowEdgeId -> backendEdgeId
+}
 
 // 永続化データの型
 interface StoredPositions {
@@ -73,7 +89,7 @@ function checkCollision(node1: Node, node2: Node): boolean {
   return distX < minDistX && distY < minDistY;
 }
 
-// 重ならない位置を見つける
+// 重ならない位置を見つける（8方向探索）
 function findNonOverlappingPosition(
   draggedNode: Node,
   allNodes: Node[]
@@ -82,44 +98,66 @@ function findNonOverlappingPosition(
   const otherNodes = allNodes.filter((n) => n.id !== draggedNode.id);
   const tempNode = { ...draggedNode, position: pos };
 
-  let hasCollision = true;
-  let attempts = 0;
-  const maxAttempts = 50;
-
-  while (hasCollision && attempts < maxAttempts) {
-    hasCollision = false;
-    for (const other of otherNodes) {
-      if (checkCollision(tempNode, other)) {
-        hasCollision = true;
-        pos.x += NODE_PADDING + 10;
-        pos.y += NODE_PADDING + 10;
-        tempNode.position = pos;
-        break;
-      }
-    }
-    attempts++;
+  // 現在位置で衝突がなければそのまま返す
+  const initialCollision = otherNodes.some((other) =>
+    checkCollision(tempNode, other)
+  );
+  if (!initialCollision) {
+    return pos;
   }
 
-  return pos;
+  // 8方向探索（右、下、左、上、右下、右上、左下、左上）
+  const directions = [
+    { dx: 1, dy: 0 }, // 右
+    { dx: 0, dy: 1 }, // 下
+    { dx: -1, dy: 0 }, // 左
+    { dx: 0, dy: -1 }, // 上
+    { dx: 1, dy: 1 }, // 右下
+    { dx: 1, dy: -1 }, // 右上
+    { dx: -1, dy: 1 }, // 左下
+    { dx: -1, dy: -1 }, // 左上
+  ];
+
+  const step = NODE_PADDING + 20;
+
+  for (let distance = 1; distance <= 10; distance++) {
+    for (const dir of directions) {
+      const testPos = {
+        x: pos.x + dir.dx * step * distance,
+        y: pos.y + dir.dy * step * distance,
+      };
+      tempNode.position = testPos;
+
+      const hasCollision = otherNodes.some((other) =>
+        checkCollision(tempNode, other)
+      );
+
+      if (!hasCollision) {
+        return testPos;
+      }
+    }
+  }
+
+  // 見つからない場合は右にオフセット
+  return { x: pos.x + step * 3, y: pos.y };
 }
 
-// グリッド配置で重ならない位置を計算
+// グリッド配置で重ならない位置を計算（8方向探索）
 function calculateGridPosition(
   index: number,
   existingNodes: Node[],
   nodeType: "session" | "context"
 ): { x: number; y: number } {
-  const cols = 4; // 4列のグリッド
+  const cols = 4;
   const rowSpacing = nodeType === "context" ? 180 : 100;
   const colSpacing = nodeType === "context" ? 280 : 220;
   const startX = nodeType === "context" ? 500 : 50;
   const startY = 80;
 
   // 基本的なグリッド位置
-  let baseX = startX + (index % cols) * colSpacing;
-  let baseY = startY + Math.floor(index / cols) * rowSpacing;
+  const baseX = startX + (index % cols) * colSpacing;
+  const baseY = startY + Math.floor(index / cols) * rowSpacing;
 
-  // 既存ノードとの衝突をチェック
   const tempNode: Node = {
     id: "temp",
     type: nodeType,
@@ -127,40 +165,48 @@ function calculateGridPosition(
     data: {},
   };
 
-  let attempts = 0;
-  const maxAttempts = 100;
-
-  while (attempts < maxAttempts) {
-    let hasCollision = false;
-    for (const other of existingNodes) {
-      if (checkCollision(tempNode, other)) {
-        hasCollision = true;
-        break;
-      }
-    }
-
-    if (!hasCollision) {
-      return tempNode.position;
-    }
-
-    // 衝突した場合、次の位置を試す（スパイラル状に探索）
-    const spiralIndex = attempts + 1;
-    const spiralCol = spiralIndex % cols;
-    const spiralRow = Math.floor(spiralIndex / cols);
-
-    tempNode.position = {
-      x: startX + spiralCol * colSpacing,
-      y: startY + spiralRow * rowSpacing,
-    };
-
-    attempts++;
+  // まず基本位置で衝突チェック
+  const hasInitialCollision = existingNodes.some((other) =>
+    checkCollision(tempNode, other)
+  );
+  if (!hasInitialCollision) {
+    return { x: baseX, y: baseY };
   }
 
-  // 最大試行回数に達した場合、右下に配置
-  return {
-    x: startX + (attempts % cols) * colSpacing,
-    y: startY + Math.floor(attempts / cols) * rowSpacing,
-  };
+  // 8方向探索
+  const directions = [
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: -1 },
+    { dx: 1, dy: 1 },
+    { dx: 1, dy: -1 },
+    { dx: -1, dy: 1 },
+    { dx: -1, dy: -1 },
+  ];
+
+  const step = nodeType === "context" ? 100 : 60;
+
+  for (let distance = 1; distance <= 15; distance++) {
+    for (const dir of directions) {
+      const testPos = {
+        x: baseX + dir.dx * step * distance,
+        y: baseY + dir.dy * step * distance,
+      };
+      tempNode.position = testPos;
+
+      const hasCollision = existingNodes.some((other) =>
+        checkCollision(tempNode, other)
+      );
+
+      if (!hasCollision && testPos.x >= 0 && testPos.y >= 0) {
+        return testPos;
+      }
+    }
+  }
+
+  // 見つからない場合は下に配置
+  return { x: baseX, y: baseY + rowSpacing * (index + 1) };
 }
 
 // localStorage ヘルパー関数
@@ -215,12 +261,65 @@ function saveConnectedSessions(ids: string[]): void {
   }
 }
 
+// Edge API functions
+async function createEdgeApi(
+  sourceSessionId: string,
+  targetClaudeSessionId: string
+): Promise<EdgeApiResponse | null> {
+  try {
+    const response = await fetch(`${API_URL}/api/edges`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceSessionId, targetClaudeSessionId }),
+    });
+    if (!response.ok) {
+      console.warn("[NodeEditor] Failed to create edge:", response.status);
+      return null;
+    }
+    return await response.json();
+  } catch (error) {
+    console.warn("[NodeEditor] Error creating edge:", error);
+    return null;
+  }
+}
+
+async function deleteEdgeApi(edgeId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_URL}/api/edges/${edgeId}`, {
+      method: "DELETE",
+    });
+    return response.ok || response.status === 404;
+  } catch (error) {
+    console.warn("[NodeEditor] Error deleting edge:", error);
+    return false;
+  }
+}
+
+async function loadEdgesFromApi(
+  claudeSessionId: string
+): Promise<EdgeApiResponse[]> {
+  try {
+    const response = await fetch(
+      `${API_URL}/api/edges/by-target/${claudeSessionId}`
+    );
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.edges || [];
+  } catch (error) {
+    console.warn("[NodeEditor] Error loading edges:", error);
+    return [];
+  }
+}
+
 interface SessionNodeData {
   label: string;
   sessionId?: string;
   status?: string;
   date?: string;
   tokenCount?: number;
+  projectName?: string;
+  isHovered?: boolean;
+  onClick?: () => void;
   [key: string]: unknown;
 }
 
@@ -261,24 +360,60 @@ function formatTokenCount(count: number): string {
 
 // セッションノードコンポーネント
 function SessionNode({ data }: { data: SessionNodeData }) {
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        data.onClick?.();
+      }
+    },
+    [data]
+  );
+
   return (
-    <div className="px-4 py-3 bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-lg shadow-md min-w-[150px] relative">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={data.onClick}
+      onKeyDown={handleKeyDown}
+      aria-label={`Session: ${data.label}${data.projectName ? ` - Project: ${data.projectName}` : ""}`}
+      className={
+        "group px-4 py-3 bg-[var(--bg-surface)] border rounded-lg shadow-md w-[180px] h-[70px] relative transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-400)] focus:ring-offset-2 focus:ring-offset-[var(--bg-base)] " +
+        (data.isHovered
+          ? "border-[var(--color-primary-400)] ring-2 ring-[var(--color-primary-400)]/50 scale-105"
+          : "border-[var(--border-default)] hover:border-[var(--color-primary-400)] hover:shadow-lg")
+      }
+    >
       <Handle
         type="source"
         position={Position.Right}
         className="w-3 h-3 bg-[var(--color-primary-500)]"
+        aria-hidden="true"
       />
       {data.tokenCount !== undefined && (
-        <div className="absolute -top-2 -right-2 bg-[var(--bg-elevated)] text-[var(--text-muted)] text-xs px-1.5 py-0.5 rounded-full border border-[var(--border-default)]">
+        <div
+          className="absolute -top-2 -right-2 bg-[var(--bg-elevated)] text-[var(--text-muted)] text-xs px-1.5 py-0.5 rounded-full border border-[var(--border-default)]"
+          aria-label={`Token count: ${data.tokenCount}`}
+        >
           {formatTokenCount(data.tokenCount)}
         </div>
       )}
       <div className="text-sm font-medium text-[var(--text-primary)] truncate">
         {data.label}
       </div>
-      {data.date && (
-        <div className="text-xs text-[var(--text-muted)] mt-1">{data.date}</div>
-      )}
+      <div className="flex items-center gap-2 mt-1">
+        {data.date && (
+          <span className="text-xs text-[var(--text-muted)]">{data.date}</span>
+        )}
+        {data.projectName && (
+          <span
+            className="px-1.5 py-0.5 bg-[var(--bg-elevated)] rounded text-[10px] text-[var(--text-secondary)] truncate max-w-[70px]"
+            title={data.projectName}
+          >
+            {data.projectName}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -371,6 +506,12 @@ interface Session {
   status: string;
   updatedAt: string;
   tokenCount?: number;
+  projectId?: string;
+}
+
+interface Project {
+  projectId: string;
+  name: string;
 }
 
 interface Observation {
@@ -397,6 +538,7 @@ interface DeleteTarget {
 
 interface NodeEditorProps {
   sessions?: Session[];
+  projects?: Project[];
   currentSessionsData?: CurrentSessionData[];
   onGetSession?: (sessionId: string) => void;
   onExportSession?: (sessionId: string) => void;
@@ -409,10 +551,15 @@ interface NodeEditorProps {
   mergeStatus?: MergeStatus;
   /** マージ済みの要約 */
   mergedSummary?: MergedSummary | null;
+  /** セッション詳細表示 */
+  onSessionDetail?: (sessionId: string) => void;
+  /** サイドバーでホバー中のセッションID */
+  hoveredSessionId?: string | null;
 }
 
 export function NodeEditor({
   sessions = [],
+  projects = [],
   currentSessionsData = [],
   onGetSession,
   onExportSession,
@@ -422,6 +569,8 @@ export function NodeEditor({
   onMerge,
   mergeStatus = "idle",
   mergedSummary,
+  onSessionDetail,
+  hoveredSessionId,
 }: NodeEditorProps) {
   // 初期化時にlocalStorageから復元
   const storedPositions = useRef(loadPositions());
@@ -432,9 +581,19 @@ export function NodeEditor({
     storedConnected.current
   );
 
+  // Backend edge ID mapping (reactFlowEdgeId -> backendEdgeId)
+  const [edgeMapping, setEdgeMapping] = useState<EdgeMapping>({});
+  const edgesLoadedRef = useRef<Set<string>>(new Set());
+
   // 初期ノードは空（contextノードは動的に生成）
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState(storedEdges.current);
+
+  // プロジェクトIDから名前へのマップ（メモ化）
+  const projectMap = useMemo(
+    () => new Map(projects.map((p) => [p.projectId, p.name])),
+    [projects]
+  );
 
   // ノード位置変更時に保存
   const handleNodesChange = useCallback(
@@ -610,8 +769,43 @@ export function NodeEditor({
       const newSessionNodes: Node[] = [];
       const positions = storedPositions.current;
 
+      // セッションデータをマップ化（既存ノード更新用）
+      const sessionMap = new Map(
+        sessions.map((s) => ["session-" + s.sessionId, s])
+      );
+
+      // 既存ノードを更新（名前やステータスの変更を反映）
+      const updatedNodes = nds.map((node) => {
+        if (node.type === "session") {
+          const session = sessionMap.get(node.id);
+          if (session) {
+            const projectName = session.projectId
+              ? projectMap.get(session.projectId)
+              : undefined;
+            // 名前、プロジェクトが変わった場合は更新
+            if (
+              node.data.label !== session.name ||
+              node.data.projectName !== projectName
+            ) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  label: session.name,
+                  status: session.status,
+                  date: new Date(session.updatedAt).toLocaleDateString("ja-JP"),
+                  tokenCount: session.tokenCount,
+                  projectName,
+                },
+              };
+            }
+          }
+        }
+        return node;
+      });
+
       // 新しいノードを追加する前の全ノード（重複チェック用）
-      let allNodesForCollision = [...nds];
+      let allNodesForCollision = [...updatedNodes];
       let newNodeIndex = 0;
 
       sessions.forEach((session) => {
@@ -627,6 +821,10 @@ export function NodeEditor({
                 "session"
               );
 
+          const projectName = session.projectId
+            ? projectMap.get(session.projectId)
+            : undefined;
+
           const newNode: Node = {
             id: nodeId,
             type: "session",
@@ -637,6 +835,8 @@ export function NodeEditor({
               status: session.status,
               date: new Date(session.updatedAt).toLocaleDateString("ja-JP"),
               tokenCount: session.tokenCount,
+              projectName,
+              onClick: () => onSessionDetail?.(session.sessionId),
             },
           };
 
@@ -650,7 +850,7 @@ export function NodeEditor({
       const validSessionIds = new Set(
         sessions.map((s) => "session-" + s.sessionId)
       );
-      const filteredNodes = nds.filter(
+      const filteredNodes = updatedNodes.filter(
         (n) => n.id.startsWith("context-") || validSessionIds.has(n.id)
       );
 
@@ -667,10 +867,85 @@ export function NodeEditor({
 
       return result;
     });
-  }, [sessions, setNodes]);
+  }, [sessions, projectMap, setNodes]);
+
+  // hoveredSessionId が変わったらノードの isHovered を更新
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.type === "session") {
+          const sessionId = node.data.sessionId;
+          const isHovered = sessionId === hoveredSessionId;
+          if (node.data.isHovered !== isHovered) {
+            return {
+              ...node,
+              data: { ...node.data, isHovered },
+            };
+          }
+        }
+        return node;
+      })
+    );
+  }, [hoveredSessionId, setNodes]);
+
+  // Load edges from API for each context node
+  useEffect(() => {
+    const loadEdgesForContextNodes = async () => {
+      for (const data of currentSessionsData) {
+        const session = data.session;
+        if (!session) continue;
+
+        const claudeSessionId = session.sessionId;
+
+        // Skip if already loaded
+        if (edgesLoadedRef.current.has(claudeSessionId)) continue;
+        edgesLoadedRef.current.add(claudeSessionId);
+
+        // Load edges from API
+        const apiEdges = await loadEdgesFromApi(claudeSessionId);
+        if (apiEdges.length === 0) continue;
+
+        // Create React Flow edges and mapping
+        const newEdges: Edge[] = [];
+        const newMapping: EdgeMapping = {};
+        const newConnectedIds: string[] = [];
+
+        for (const apiEdge of apiEdges) {
+          const reactFlowEdgeId = `reactflow__edge-session-${apiEdge.sourceSessionId}-context-${claudeSessionId}`;
+          newEdges.push({
+            id: reactFlowEdgeId,
+            source: `session-${apiEdge.sourceSessionId}`,
+            target: `context-${claudeSessionId}`,
+          });
+          newMapping[reactFlowEdgeId] = apiEdge.edgeId;
+          newConnectedIds.push(apiEdge.sourceSessionId);
+        }
+
+        // Update state
+        setEdges((eds) => {
+          // Avoid duplicates
+          const existingIds = new Set(eds.map((e) => e.id));
+          const filtered = newEdges.filter((e) => !existingIds.has(e.id));
+          const result = [...eds, ...filtered];
+          saveEdges(result);
+          return result;
+        });
+
+        setEdgeMapping((prev) => ({ ...prev, ...newMapping }));
+
+        setConnectedSessionIds((prev) => {
+          const combined = [...new Set([...prev, ...newConnectedIds])];
+          saveConnectedSessions(combined);
+          return combined;
+        });
+      }
+    };
+
+    loadEdgesForContextNodes();
+  }, [currentSessionsData, setEdges]);
 
   const onConnect = useCallback(
-    (params: Connection) => {
+    async (params: Connection) => {
       if (!params.source || !params.target) return;
 
       // セッションノードから任意のcontextノードへの接続を許可
@@ -679,12 +954,30 @@ export function NodeEditor({
         params.target.startsWith("context-")
       ) {
         const sessionId = params.source.replace("session-", "");
+        const claudeSessionId = params.target.replace("context-", "");
 
         if (connectedSessionIds.includes(sessionId)) return;
+
+        // Save edge to API
+        const apiEdge = await createEdgeApi(sessionId, claudeSessionId);
 
         setEdges((eds) => {
           const newEdges = addEdge(params, eds);
           saveEdges(newEdges);
+
+          // Store edge mapping if API call succeeded
+          if (apiEdge) {
+            const reactFlowEdgeId = newEdges.find(
+              (e) => e.source === params.source && e.target === params.target
+            )?.id;
+            if (reactFlowEdgeId) {
+              setEdgeMapping((prev) => ({
+                ...prev,
+                [reactFlowEdgeId]: apiEdge.edgeId,
+              }));
+            }
+          }
+
           return newEdges;
         });
 
@@ -746,10 +1039,23 @@ export function NodeEditor({
 
   // 実際のエッジ削除処理
   const onEdgeDelete = useCallback(
-    (deletedEdges: Edge[]) => {
+    async (deletedEdges: Edge[]) => {
       const deletedSessionIds = deletedEdges
         .filter((edge) => edge.source.startsWith("session-"))
         .map((edge) => edge.source.replace("session-", ""));
+
+      // Delete edges from API
+      for (const edge of deletedEdges) {
+        const backendEdgeId = edgeMapping[edge.id];
+        if (backendEdgeId) {
+          await deleteEdgeApi(backendEdgeId);
+          setEdgeMapping((prev) => {
+            const next = { ...prev };
+            delete next[edge.id];
+            return next;
+          });
+        }
+      }
 
       const newConnectedIds = connectedSessionIds.filter(
         (id) => !deletedSessionIds.includes(id)
@@ -777,7 +1083,7 @@ export function NodeEditor({
         })
       );
     },
-    [connectedSessionIds, setNodes, setEdges]
+    [connectedSessionIds, setNodes, setEdges, edgeMapping]
   );
 
   // ノードクリック時（セッションノードの削除確認を表示）
