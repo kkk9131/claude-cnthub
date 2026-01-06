@@ -5,7 +5,7 @@ import { ChatIcon, ClockIcon, ChevronRightIcon } from "./icons";
 interface Session {
   sessionId: string;
   name: string;
-  status: "idle" | "active" | "completed" | "error";
+  status: "idle" | "processing" | "completed" | "error";
   createdAt: string;
   updatedAt: string;
   workingDir?: string;
@@ -134,7 +134,7 @@ interface SessionCardProps {
 
 const statusLabels: Record<Session["status"], string> = {
   idle: "Idle",
-  active: "Active",
+  processing: "Processing",
   completed: "Completed",
   error: "Error",
 };
@@ -149,7 +149,7 @@ const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
   const statusColors = useMemo(
     () => ({
       idle: "bg-gray-400",
-      active: "bg-primary-500",
+      processing: "bg-primary-500",
       completed: "bg-green-500",
       error: "bg-red-500",
     }),
@@ -170,7 +170,11 @@ const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
 
   return (
     <button
-      className="card hover:bg-[var(--bg-elevated)] transition-colors w-full text-left group"
+      className={`card hover:bg-[var(--bg-elevated)] transition-colors w-full text-left group ${
+        session.status === "processing"
+          ? "border-2 border-[var(--color-primary-400)]"
+          : ""
+      }`}
       role="listitem"
       aria-label={`Open session: ${session.name}`}
       onClick={handleClick}

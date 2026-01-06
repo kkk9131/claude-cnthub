@@ -7,12 +7,13 @@
  * 1. cwd が既存プロジェクトの rootPath に完全一致 → そのプロジェクトに紐付け
  * 2. cwd が既存プロジェクトの rootPath のサブディレクトリ → そのプロジェクトに紐付け
  *    - 複数マッチした場合は、最も長いパス（より具体的なプロジェクト）を優先
- * 3. マッチなし → null（プロジェクト紐付けなし）
+ * 3. マッチなし → 新規プロジェクト作成（autoCreate オプション）
  */
 
 import type { Project } from "@claude-cnthub/shared";
 import { query } from "../db";
 import { rowToEntity } from "../repositories/base";
+import { createProject, getProjectByPath } from "../repositories/project";
 
 /**
  * DBレコードからProjectエンティティへ変換
@@ -83,4 +84,63 @@ export function findProjectByWorkingDir(workingDir: string): Project | null {
   }
 
   return null;
+}
+
+/**
+ * パスからプロジェクト名を抽出
+ *
+ * @param workingDir 作業ディレクトリ
+ * @returns プロジェクト名
+ */
+function extractProjectName(workingDir: string): string {
+  const parts = workingDir.split(/[/\\]/).filter(Boolean);
+  return parts[parts.length - 1] || "Unknown Project";
+}
+
+/**
+ * 作業ディレクトリからプロジェクトを取得または作成
+ *
+ * @param workingDir 作業ディレクトリ（cwd）
+ * @param options.autoCreate マッチなしの場合に自動作成するか（デフォルト: true）
+ * @returns プロジェクト、または null
+ */
+export function findOrCreateProjectByWorkingDir(
+  workingDir: string,
+  options: { autoCreate?: boolean } = {}
+): Project | null {
+  const { autoCreate = true } = options;
+
+  if (!workingDir || workingDir.trim() === "") {
+    return null;
+  }
+
+  // 1. 既存プロジェクトを検索
+  const existing = findProjectByWorkingDir(workingDir);
+  if (existing) {
+    return existing;
+  }
+
+  // 2. 自動作成が無効の場合は null
+  if (!autoCreate) {
+    return null;
+  }
+
+  // 3. 完全一致するプロジェクトがあるかチェック（重複防止）
+  const normalizedPath = normalizePath(workingDir);
+  const exactMatch = getProjectByPath(normalizedPath);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  // 4. 新規プロジェクト作成
+  try {
+    const name = extractProjectName(workingDir);
+    return createProject({
+      name,
+      path: normalizedPath,
+    });
+  } catch {
+    // プロジェクト作成に失敗しても、セッションは作成可能にする
+    return null;
+  }
 }

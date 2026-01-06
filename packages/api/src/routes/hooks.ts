@@ -24,6 +24,7 @@ import {
   buildRelatedContext,
   isContextInjectionAvailable,
 } from "../services/context";
+import { findOrCreateProjectByWorkingDir } from "../services/project-linking";
 import { hookLogger as log } from "../utils/logger";
 
 const hooksRouter = new Hono();
@@ -163,10 +164,15 @@ hooksRouter.post(
       });
     }
 
+    // workingDirectory からプロジェクトを検索または作成
+    const workingDir = data.workingDirectory || process.cwd();
+    const project = findOrCreateProjectByWorkingDir(workingDir);
+
     // 新規セッション作成
     const session = createSession({
       name: `Session ${data.sessionId}`,
-      workingDir: data.workingDirectory || process.cwd(),
+      workingDir,
+      projectId: project?.projectId,
     });
 
     // Claude Code セッション ID を紐付け + processing 状態に更新
@@ -174,6 +180,14 @@ hooksRouter.post(
       claudeSessionId: data.sessionId,
       status: "processing",
     });
+
+    if (project) {
+      log.info("Session linked to project", {
+        sessionId: session.sessionId,
+        projectId: project.projectId,
+        projectName: project.name,
+      });
+    }
 
     log.info("Session started", {
       sessionId: session.sessionId,
