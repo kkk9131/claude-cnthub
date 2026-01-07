@@ -33,6 +33,10 @@ export interface MergeSummaryResult {
   topics?: string[];
   keyDecisions?: string[];
   error?: string;
+  sessionCount?: number;
+  totalOriginalTokens?: number;
+  mergedTokens?: number;
+  compressionRatio?: number;
 }
 
 /**

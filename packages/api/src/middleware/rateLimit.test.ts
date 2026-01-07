@@ -38,7 +38,7 @@ describe("rateLimit middleware", () => {
     expect(res.status).toBe(429);
     expect(res.headers.get("Retry-After")).toBeTruthy();
 
-    const body = await res.json();
+    const body = (await res.json()) as { error: string };
     expect(body.error).toBe("Rate limit exceeded");
   });
 
@@ -58,7 +58,7 @@ describe("rateLimit middleware", () => {
     const res = await app.request("/"); // 2回目は制限
 
     expect(res.status).toBe(429);
-    const body = await res.json();
+    const body = (await res.json()) as { message: string };
     expect(body.message).toBe("Custom rate limit message");
   });
 

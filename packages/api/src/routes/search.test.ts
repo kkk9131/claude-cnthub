@@ -37,7 +37,10 @@ describe("Search API", () => {
 
     test("APIキー未設定時は available: false", async () => {
       const res = await app.request("/api/search/status");
-      const data = await res.json();
+      const data = (await res.json()) as {
+        available: boolean;
+        message: string;
+      };
 
       expect(data.available).toBe(false);
       expect(data.message).toContain("VOYAGE_API_KEY");
@@ -53,7 +56,7 @@ describe("Search API", () => {
       });
 
       expect(res.status).toBe(503);
-      const data = await res.json();
+      const data = (await res.json()) as { error: string };
       expect(data.error).toBe("Semantic search is not available");
     });
 
@@ -88,7 +91,7 @@ describe("Search API", () => {
       });
 
       expect(res.status).toBe(503);
-      const data = await res.json();
+      const data = (await res.json()) as { error: string };
       expect(data.error).toBe("Context injection is not available");
     });
 

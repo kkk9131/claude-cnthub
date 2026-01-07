@@ -36,7 +36,10 @@ console.log(`
 export default {
   port: config.api.port,
   idleTimeout: 120, // AI分析用に120秒に延長（デフォルト10秒）
-  fetch(req: Request, server: Server): Response | Promise<Response> {
+  fetch(
+    req: Request,
+    server: Server<WSClientData>
+  ): Response | Promise<Response> {
     const url = new URL(req.url);
 
     // WebSocketアップグレードリクエストの処理
@@ -51,7 +54,7 @@ export default {
       }
 
       // WebSocketにアップグレード
-      const upgraded = server.upgrade<WSClientData>(req, {
+      const upgraded = server.upgrade(req, {
         data: { clientId: "" }, // open()で設定される
       });
 

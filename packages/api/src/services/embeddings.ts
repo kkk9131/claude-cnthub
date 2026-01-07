@@ -89,10 +89,10 @@ async function getLocalPipeline(): Promise<TransformersPipeline | null> {
     try {
       console.log("[Embeddings] Loading local model (all-MiniLM-L6-v2)...");
       const { pipeline } = await import("@xenova/transformers");
-      localPipeline = await pipeline(
+      localPipeline = (await pipeline(
         "feature-extraction",
         "Xenova/all-MiniLM-L6-v2"
-      );
+      )) as unknown as TransformersPipeline;
       console.log("[Embeddings] Local model loaded successfully");
       return localPipeline;
     } catch (error) {
@@ -142,7 +142,7 @@ async function generateVoyageEmbedding(
     }
 
     return {
-      embedding: result.data[0].embedding,
+      embedding: result.data[0].embedding ?? [],
       totalTokens: result.usage?.totalTokens ?? 0,
       provider: "voyage",
       dimension: EMBEDDING_DIMENSIONS.voyage,
@@ -271,7 +271,7 @@ export async function generateEmbeddings(
           result.data?.forEach((item, idx) => {
             const originalIndex = indicesToProcess[idx];
             results[originalIndex] = {
-              embedding: item.embedding,
+              embedding: item.embedding ?? [],
               totalTokens: tokensPerItem,
               provider: "voyage",
               dimension: EMBEDDING_DIMENSIONS.voyage,

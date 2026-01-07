@@ -15,6 +15,9 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { createMiddleware } from "hono/factory";
+import { findSourceSessionIdsByTarget } from "../repositories/edge";
+import { getSummariesBySessionIds } from "../repositories/summary";
+import { getSessionById } from "../repositories/session";
 
 const injectRouter = new Hono();
 
@@ -216,6 +219,81 @@ injectRouter.delete("/pending/:sessionId", async (c) => {
 
   // 204 No Content
   return c.body(null, 204);
+});
+
+// ==================== 接続セッションコンテキスト ====================
+
+/**
+ * GET /connected/:claudeSessionId - UIで接続されたセッションのコンテキストを取得
+ *
+ * NodeEditorでセッションノードを接続した場合、
+ * そのセッションのコンテキストをまとめて返す。
+ */
+injectRouter.get("/connected/:claudeSessionId", async (c) => {
+  const claudeSessionId = c.req.param("claudeSessionId");
+
+  // 接続されたソースセッションIDを取得
+  const sourceSessionIds = findSourceSessionIdsByTarget(claudeSessionId);
+
+  if (sourceSessionIds.length === 0) {
+    return c.json({
+      claudeSessionId,
+      connected: false,
+      sourceSessionIds: [],
+      context: null,
+    });
+  }
+
+  // セッション情報と要約を取得
+  const summaries = getSummariesBySessionIds(sourceSessionIds);
+
+  // コンテキストをフォーマット
+  const contextParts: string[] = [];
+
+  for (const sessionId of sourceSessionIds) {
+    const session = getSessionById(sessionId);
+    const summary = summaries.get(sessionId);
+
+    if (session) {
+      const sessionName = session.name || sessionId;
+      const summaryText =
+        summary?.shortSummary || summary?.detailedSummary || "(要約なし)";
+      const decisions = summary?.keyDecisions || [];
+      const files = summary?.filesModified || [];
+
+      let part = `## ${sessionName} (${sessionId})\n`;
+      part += `\n${summaryText}\n`;
+
+      if (decisions.length > 0) {
+        part += `\n**決定事項:**\n`;
+        for (const decision of decisions) {
+          part += `- ${decision}\n`;
+        }
+      }
+
+      if (files.length > 0) {
+        part += `\n**変更ファイル:**\n`;
+        for (const file of files) {
+          part += `- \`${file}\`\n`;
+        }
+      }
+
+      contextParts.push(part);
+    }
+  }
+
+  const context =
+    contextParts.length > 0
+      ? `# UIで接続されたセッションのコンテキスト\n\n${contextParts.join("\n---\n\n")}`
+      : null;
+
+  return c.json({
+    claudeSessionId,
+    connected: true,
+    sourceSessionIds,
+    sessionCount: sourceSessionIds.length,
+    context,
+  });
 });
 
 // ==================== 定期クリーンアップ（オプション） ====================

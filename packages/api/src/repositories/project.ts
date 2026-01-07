@@ -141,7 +141,7 @@ export function createProject(data: CreateProjectData): Project {
       projectId,
       name: data.name,
       path: data.path,
-      description,
+      description: description ?? undefined,
       createdAt: new Date(timestamp),
       updatedAt: new Date(timestamp),
     };
