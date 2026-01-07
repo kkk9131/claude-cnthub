@@ -3,17 +3,22 @@
  *
  * - 左サイドバー: プロジェクト切替 + セッション一覧
  * - メイン: React Flow ノードエディタ
+ * - Sessions / System タブ切り替え (SYS-06)
  */
 
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { ViewerSidebar } from "../components/ViewerSidebar";
 import { NodeEditor } from "../components/NodeEditor";
+import { SystemContextManager } from "../components/SystemContextManager";
 import { SmartExportModal } from "../components/SmartExportModal";
 import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { SessionDetailModal } from "../components/SessionDetailModal";
 import { useTheme } from "../hooks/useTheme";
 import { useProjectStore } from "../stores/projectStore";
-import { MoonIcon, SunIcon } from "../components/icons";
+import { MoonIcon, SunIcon, SessionsIcon, CogIcon } from "../components/icons";
+
+// ビュータブの型
+type ViewTab = "sessions" | "system";
 
 interface Session {
   sessionId: string;
@@ -58,6 +63,7 @@ export function ViewerPage() {
   const { theme, toggleTheme } = useTheme();
   const { selectedProjectId, projects } = useProjectStore();
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [activeTab, setActiveTab] = useState<ViewTab>("sessions");
   const [hiddenSessionIds, setHiddenSessionIds] = useState<string[]>([]);
   const [currentSessionsData, setCurrentSessionsData] = useState<
     CurrentSessionData[]
@@ -415,11 +421,48 @@ export function ViewerPage() {
     <div className="h-screen flex flex-col bg-[var(--bg-base)]">
       {/* ヘッダー */}
       <header className="h-12 flex items-center justify-between px-4 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)]">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold text-[var(--color-primary-500)]">
-            cnthub
-          </span>
-          <span className="text-sm text-[var(--text-muted)]">Viewer</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-semibold text-[var(--color-primary-500)]">
+              cnthub
+            </span>
+            <span className="text-sm text-[var(--text-muted)]">Viewer</span>
+          </div>
+          {/* Sessions / System タブ切り替え (SYS-06) */}
+          <div
+            className="flex items-center bg-[var(--bg-elevated)] rounded-lg p-1"
+            role="tablist"
+            aria-label="ビュー切り替え"
+          >
+            <button
+              role="tab"
+              aria-selected={activeTab === "sessions"}
+              aria-controls="sessions-panel"
+              onClick={() => setActiveTab("sessions")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "sessions"
+                  ? "bg-[var(--color-primary-500)] text-white"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]"
+              }`}
+            >
+              <SessionsIcon className="w-4 h-4" />
+              Sessions
+            </button>
+            <button
+              role="tab"
+              aria-selected={activeTab === "system"}
+              aria-controls="system-panel"
+              onClick={() => setActiveTab("system")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                activeTab === "system"
+                  ? "bg-[var(--color-primary-500)] text-white"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]"
+              }`}
+            >
+              <CogIcon className="w-4 h-4" />
+              System
+            </button>
+          </div>
         </div>
         <button
           onClick={toggleTheme}
@@ -438,35 +481,62 @@ export function ViewerPage() {
 
       {/* メインコンテンツ */}
       <div className="flex-1 flex overflow-hidden">
-        {/* 左サイドバー */}
-        <ViewerSidebar
-          sessions={sessions}
-          onSessionSelect={handleSessionToggle}
-          onSessionClick={handleSessionClick}
-          onSessionDelete={handleSessionDeleteRequest}
-          onBulkDelete={handleBulkDelete}
-          onSessionHover={setHoveredSessionId}
-          selectedSessionIds={hiddenSessionIds}
-        />
-
-        {/* メインエリア: ノードエディタ */}
-        <main className="flex-1 overflow-hidden">
-          <NodeEditor
-            sessions={visibleSessions}
-            projects={projects}
-            currentSessionsData={currentSessionsData}
-            onGetSession={handleGetSession}
-            onExportSession={handleExportSession}
-            onDeleteRequest={handleEditorDeleteRequest}
-            pendingDelete={pendingEditorDelete}
-            onDeleteComplete={handleEditorDeleteComplete}
-            onMerge={handleMerge}
-            mergeStatus={mergeStatus}
-            mergedSummary={mergedSummary}
-            onSessionDetail={(sessionId) => setDetailSessionId(sessionId)}
-            hoveredSessionId={hoveredSessionId}
-          />
-        </main>
+        {activeTab === "sessions" ? (
+          <>
+            {/* 左サイドバー - Sessions */}
+            <ViewerSidebar
+              sessions={sessions}
+              onSessionSelect={handleSessionToggle}
+              onSessionClick={handleSessionClick}
+              onSessionDelete={handleSessionDeleteRequest}
+              onBulkDelete={handleBulkDelete}
+              onSessionHover={setHoveredSessionId}
+              selectedSessionIds={hiddenSessionIds}
+            />
+            {/* Sessions ノードエディタ */}
+            <main className="flex-1 overflow-hidden">
+              <div
+                id="sessions-panel"
+                role="tabpanel"
+                aria-labelledby="sessions-tab"
+                className="h-full"
+              >
+                <NodeEditor
+                  sessions={visibleSessions}
+                  projects={projects}
+                  currentSessionsData={currentSessionsData}
+                  onGetSession={handleGetSession}
+                  onExportSession={handleExportSession}
+                  onDeleteRequest={handleEditorDeleteRequest}
+                  pendingDelete={pendingEditorDelete}
+                  onDeleteComplete={handleEditorDeleteComplete}
+                  onMerge={handleMerge}
+                  mergeStatus={mergeStatus}
+                  mergedSummary={mergedSummary}
+                  onSessionDetail={(sessionId) => setDetailSessionId(sessionId)}
+                  hoveredSessionId={hoveredSessionId}
+                />
+              </div>
+            </main>
+          </>
+        ) : (
+          /* System Context Manager (SYS-07 改良版) */
+          <main className="flex-1 overflow-hidden">
+            <div
+              id="system-panel"
+              role="tabpanel"
+              aria-labelledby="system-tab"
+              className="h-full"
+            >
+              <SystemContextManager
+                onOptimize={(category, items) => {
+                  console.log("[System] Optimize requested:", category, items);
+                  // TODO: Phase 3 で最適化機能を実装
+                }}
+              />
+            </div>
+          </main>
+        )}
       </div>
 
       {/* Smart Export モーダル */}

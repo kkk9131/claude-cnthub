@@ -9,10 +9,12 @@
  * - GET /system-context/hooks    - Hooks 一覧
  * - GET /system-context/mcp      - MCP Servers 一覧
  * - GET /system-context/rules    - Rules 一覧
+ * - POST /system-context/copy    - アイテムを別プロジェクトにコピー
  */
 
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 import { SystemContextQuerySchema } from "../schemas";
 import {
   getSystemContext,
@@ -20,7 +22,22 @@ import {
   getHooks,
   getMcpServers,
   getRules,
+  copySystemContextItems,
 } from "../services/system-context";
+
+/**
+ * コピーリクエストのスキーマ
+ */
+const CopyRequestSchema = z.object({
+  items: z.array(
+    z.object({
+      type: z.enum(["skills", "hooks", "mcp", "rules"]),
+      sourcePath: z.string(),
+      name: z.string(),
+    })
+  ),
+  targetProjectPath: z.string(),
+});
 
 const systemContextRouter = new Hono();
 
@@ -151,6 +168,41 @@ systemContextRouter.get(
       source: query.source,
     });
     return c.json({ rules });
+  }
+);
+
+/**
+ * POST /system-context/copy - System Context アイテムをコピー
+ */
+systemContextRouter.post(
+  "/copy",
+  zValidator("json", CopyRequestSchema, (result, c) => {
+    if (!result.success) {
+      return c.json(
+        {
+          error: "Validation Error",
+          details: result.error.flatten().fieldErrors,
+        },
+        400
+      );
+    }
+  }),
+  async (c) => {
+    const body = c.req.valid("json");
+    try {
+      const result = await copySystemContextItems({
+        items: body.items,
+        targetProjectPath: body.targetProjectPath,
+      });
+      return c.json(result);
+    } catch (err) {
+      return c.json(
+        {
+          error: err instanceof Error ? err.message : "コピーに失敗しました",
+        },
+        500
+      );
+    }
   }
 );
 

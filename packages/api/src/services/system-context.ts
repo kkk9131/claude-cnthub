@@ -5,8 +5,8 @@
  * 統合的に取得するサービス
  */
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { join, basename, dirname } from "node:path";
 import { homedir } from "node:os";
 import type {
   SystemContextResponse,
@@ -316,4 +316,132 @@ export async function getRules(
   }
 
   return rules;
+}
+
+/**
+ * コピー対象アイテム
+ */
+export interface CopyItem {
+  type: "skills" | "hooks" | "mcp" | "rules";
+  sourcePath: string;
+  name: string;
+}
+
+/**
+ * コピーオプション
+ */
+export interface CopyOptions {
+  items: CopyItem[];
+  targetProjectPath: string;
+}
+
+/**
+ * コピー結果
+ */
+export interface CopyResult {
+  copied: number;
+  failed: number;
+  details: Array<{
+    name: string;
+    success: boolean;
+    error?: string;
+  }>;
+}
+
+/**
+ * System Context アイテムを別プロジェクトにコピー
+ */
+export async function copySystemContextItems(
+  options: CopyOptions
+): Promise<CopyResult> {
+  const { items, targetProjectPath } = options;
+  const details: CopyResult["details"] = [];
+  let copied = 0;
+  let failed = 0;
+
+  // ターゲットの .claude ディレクトリを確認/作成
+  const targetClaudePath = join(targetProjectPath, ".claude");
+  if (!existsSync(targetClaudePath)) {
+    mkdirSync(targetClaudePath, { recursive: true });
+  }
+
+  for (const item of items) {
+    try {
+      // ソースファイルが存在するか確認
+      if (!existsSync(item.sourcePath)) {
+        details.push({
+          name: item.name,
+          success: false,
+          error: "ソースファイルが見つかりません",
+        });
+        failed++;
+        continue;
+      }
+
+      // タイプに応じたターゲットディレクトリを決定
+      let targetDir: string;
+      switch (item.type) {
+        case "skills":
+          targetDir = join(targetClaudePath, "skills");
+          break;
+        case "rules":
+          targetDir = join(targetClaudePath, "rules");
+          break;
+        case "hooks":
+        case "mcp":
+          // Hooks と MCP は設定ファイルへのマージが必要（今回は非対応）
+          details.push({
+            name: item.name,
+            success: false,
+            error: `${item.type} のコピーは現在サポートされていません`,
+          });
+          failed++;
+          continue;
+        default:
+          details.push({
+            name: item.name,
+            success: false,
+            error: "不明なタイプです",
+          });
+          failed++;
+          continue;
+      }
+
+      // ターゲットディレクトリを作成
+      if (!existsSync(targetDir)) {
+        mkdirSync(targetDir, { recursive: true });
+      }
+
+      // ファイルをコピー
+      const fileName = basename(item.sourcePath);
+      const targetPath = join(targetDir, fileName);
+
+      // 既に存在する場合は上書きしない
+      if (existsSync(targetPath)) {
+        details.push({
+          name: item.name,
+          success: false,
+          error: "同名のファイルが既に存在します",
+        });
+        failed++;
+        continue;
+      }
+
+      copyFileSync(item.sourcePath, targetPath);
+      details.push({
+        name: item.name,
+        success: true,
+      });
+      copied++;
+    } catch (err) {
+      details.push({
+        name: item.name,
+        success: false,
+        error: err instanceof Error ? err.message : "コピーに失敗しました",
+      });
+      failed++;
+    }
+  }
+
+  return { copied, failed, details };
 }
