@@ -12,7 +12,6 @@ import { useProjectStore } from "../stores/projectStore";
 import {
   ChevronDownIcon,
   FolderIcon,
-  PlusIcon,
   EyeIcon,
   EyeSlashIcon,
   TrashIcon,
@@ -36,6 +35,7 @@ interface ViewerSidebarProps {
   onSessionClick?: (session: Session) => void;
   onSessionDelete?: (session: Session) => void;
   onBulkDelete?: (sessionIds: string[]) => Promise<void>;
+  onSessionHover?: (sessionId: string | null) => void;
   selectedSessionIds?: string[];
 }
 
@@ -46,6 +46,7 @@ export function ViewerSidebar({
   onSessionClick,
   onSessionDelete,
   onBulkDelete,
+  onSessionHover,
   selectedSessionIds = [],
 }: ViewerSidebarProps) {
   const {
@@ -66,6 +67,7 @@ export function ViewerSidebar({
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [clickedSessionId, setClickedSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProjects();
@@ -79,6 +81,14 @@ export function ViewerSidebar({
         : allSessions,
     [allSessions, selectedProjectId]
   );
+
+  // セッションに紐づいているプロジェクトのみをリストアップ
+  const projectsWithSessions = useMemo(() => {
+    const sessionProjectIds = new Set(
+      allSessions.map((s) => s.projectId).filter(Boolean)
+    );
+    return projects.filter((p) => sessionProjectIds.has(p.projectId));
+  }, [allSessions, projects]);
 
   const handleProjectSelect = useCallback(
     (projectId: string | null) => {
@@ -210,7 +220,7 @@ export function ViewerSidebar({
               >
                 すべてのプロジェクト
               </button>
-              {projects.map((project) => (
+              {projectsWithSessions.map((project) => (
                 <div
                   key={project.projectId}
                   className={
@@ -360,24 +370,20 @@ export function ViewerSidebar({
                   session={session}
                   isHidden={selectedSessionIds.includes(session.sessionId)}
                   onToggle={onSessionSelect}
-                  onClick={onSessionClick}
+                  onClick={(s) => setClickedSessionId(s.sessionId)}
                   onDelete={onSessionDelete}
+                  onHover={onSessionHover}
                   bulkSelectMode={bulkSelectMode}
                   isBulkSelected={bulkSelectedIds.has(session.sessionId)}
                   onBulkToggle={handleBulkToggle}
                   projectName={project?.name}
                   showProjectBadge={!selectedProjectId}
+                  isClicked={clickedSessionId === session.sessionId}
                 />
               );
             })}
           </div>
         )}
-      </div>
-      <div className="p-3 border-t border-[var(--border-subtle)]">
-        <button className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)] transition-colors">
-          <PlusIcon className="w-4 h-4" />
-          <span>New Session</span>
-        </button>
       </div>
     </aside>
   );
@@ -389,11 +395,13 @@ interface SessionItemProps {
   onToggle?: (session: Session) => void;
   onClick?: (session: Session) => void;
   onDelete?: (session: Session) => void;
+  onHover?: (sessionId: string | null) => void;
   bulkSelectMode?: boolean;
   isBulkSelected?: boolean;
   onBulkToggle?: (sessionId: string) => void;
   projectName?: string;
   showProjectBadge?: boolean;
+  isClicked?: boolean;
 }
 
 const statusColors = {
@@ -410,11 +418,13 @@ const SessionItem = memo(function SessionItem({
   onToggle,
   onClick,
   onDelete,
+  onHover,
   bulkSelectMode = false,
   isBulkSelected = false,
   onBulkToggle,
   projectName,
   showProjectBadge = false,
+  isClicked = false,
 }: SessionItemProps) {
   const handleToggle = useCallback(
     (e: React.MouseEvent) => {
@@ -448,6 +458,14 @@ const SessionItem = memo(function SessionItem({
     [onBulkToggle, session.sessionId]
   );
 
+  const handleMouseEnter = useCallback(() => {
+    onHover?.(session.sessionId);
+  }, [onHover, session.sessionId]);
+
+  const handleMouseLeave = useCallback(() => {
+    onHover?.(null);
+  }, [onHover]);
+
   const formattedDate = new Date(session.updatedAt).toLocaleDateString(
     "ja-JP",
     { month: "short", day: "numeric" }
@@ -455,15 +473,20 @@ const SessionItem = memo(function SessionItem({
 
   return (
     <div
+      onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className={
-        "group flex items-center gap-1 px-2 py-2 rounded-lg transition-colors " +
+        "group flex items-center gap-1 px-2 py-2 rounded-lg transition-colors cursor-pointer " +
         (isBulkSelected
           ? "bg-[var(--color-primary-500)]/20"
           : isHidden
-            ? "opacity-50"
+            ? "opacity-50 hover:opacity-70"
             : session.status === "processing"
               ? "border border-[var(--color-primary-400)] bg-[var(--color-primary-400)]/5 hover:bg-[var(--color-primary-400)]/10"
-              : "hover:bg-[var(--bg-elevated)]")
+              : isClicked
+                ? "bg-[var(--color-primary-400)]/20 hover:bg-[var(--color-primary-400)]/25"
+                : "hover:bg-[var(--color-primary-400)]/10")
       }
     >
       {bulkSelectMode ? (
@@ -494,10 +517,7 @@ const SessionItem = memo(function SessionItem({
           )}
         </button>
       )}
-      <button
-        onClick={handleClick}
-        className="flex-1 text-left flex items-center gap-2 min-w-0"
-      >
+      <div className="flex-1 text-left flex items-center gap-2 min-w-0">
         <span
           className={
             "w-2 h-2 rounded-full flex-shrink-0 " +
@@ -524,7 +544,7 @@ const SessionItem = memo(function SessionItem({
             )}
           </div>
         </div>
-      </button>
+      </div>
       {!bulkSelectMode && (
         <button
           onClick={handleDelete}
