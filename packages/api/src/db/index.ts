@@ -94,6 +94,7 @@ import { migration as migration005 } from "./migrations/005_add_extended_summary
 import { migration as migration006 } from "./migrations/006_create_merges";
 import { migration as migration007 } from "./migrations/007_create_observations";
 import { migration as migration008 } from "./migrations/008_add_local_embeddings";
+import { migration as migration009 } from "./migrations/009_add_session_edges";
 
 // 全マイグレーションリスト
 const allMigrations = [
@@ -105,6 +106,7 @@ const allMigrations = [
   migration006,
   migration007,
   migration008,
+  migration009,
 ];
 
 /**
