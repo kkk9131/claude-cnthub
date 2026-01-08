@@ -43,9 +43,9 @@ function isCnthubCommand(message) {
 
 /**
  * Generate session name from first message
- * @param {string} sessionId - Session ID
+ * @param {string} sessionId - Session ID (Claude UUID)
  * @param {string} message - User's first message
- * @returns {Promise<string|null>} Generated name or null on failure
+ * @returns {Promise<{name: string, cnthubSessionId: string}|null>} Generated name and cnthub session ID, or null on failure
  */
 async function generateSessionName(sessionId, message) {
   try {
@@ -62,7 +62,10 @@ async function generateSessionName(sessionId, message) {
     }
 
     const result = await response.json();
-    return result.name || null;
+    return {
+      name: result.name || null,
+      cnthubSessionId: result.sessionId || null,
+    };
   } catch (error) {
     console.error(
       `[cnthub] Error generating session name: ${getErrorMessage(error)}`
@@ -180,6 +183,44 @@ async function getPendingInject(sessionId) {
 }
 
 /**
+ * Get context from UI-connected sessions
+ * @param {string} sessionId - Claude session ID (UUID)
+ * @returns {Promise<string|null>} Connected sessions context or null
+ */
+async function getConnectedSessionsContext(sessionId) {
+  try {
+    const response = await fetchWithTimeout(
+      `${API_URL}/api/inject/connected/${sessionId}`,
+      { method: "GET" }
+    );
+
+    if (!response.ok) {
+      console.error(
+        `[cnthub] Failed to get connected sessions: ${response.status}`
+      );
+      return null;
+    }
+
+    const result = await response.json();
+
+    // Check if any sessions are connected
+    if (!result.connected || result.sessionCount === 0) {
+      return null;
+    }
+
+    console.error(
+      `[cnthub] Found ${result.sessionCount} connected sessions from UI`
+    );
+    return result.context || null;
+  } catch (error) {
+    console.error(
+      `[cnthub] Error getting connected sessions: ${getErrorMessage(error)}`
+    );
+    return null;
+  }
+}
+
+/**
  * Delete pending inject after successful injection
  * @param {string} sessionId - Session ID
  * @returns {Promise<boolean>} Success status
@@ -280,11 +321,14 @@ async function main() {
       console.error("[cnthub] First message detected, processing...");
 
       // 1. Generate and update session name
-      const generatedName = await generateSessionName(sessionId, message);
-      if (generatedName) {
-        const updated = await updateSessionName(sessionId, generatedName);
+      const result = await generateSessionName(sessionId, message);
+      if (result && result.name && result.cnthubSessionId) {
+        const updated = await updateSessionName(
+          result.cnthubSessionId,
+          result.name
+        );
         if (updated) {
-          console.error(`[cnthub] Session name updated: ${generatedName}`);
+          console.error(`[cnthub] Session name updated: ${result.name}`);
         }
       }
 
@@ -298,7 +342,14 @@ async function main() {
       }
     }
 
-    // 3. Check for pending inject (always, not just first message)
+    // 3. Check for UI-connected sessions (always)
+    const connectedContext = await getConnectedSessionsContext(sessionId);
+    if (connectedContext) {
+      console.error("[cnthub] Adding connected sessions context");
+      additionalContextParts.push(connectedContext);
+    }
+
+    // 4. Check for pending inject (always, not just first message)
     const pendingContext = await getPendingInject(sessionId);
     if (pendingContext) {
       console.error("[cnthub] Found pending inject, adding to context");

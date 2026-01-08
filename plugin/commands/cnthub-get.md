@@ -10,15 +10,17 @@ description: 過去のセッションからコンテキストを取得
 ## 使い方
 
 ```
-/cnthub:get          # リストから選択
-/cnthub:get last     # 直近1件を自動取得
-/cnthub:get last N   # 直近N件を自動取得
+/cnthub:get             # リストから選択
+/cnthub:get last        # 直近1件を自動取得
+/cnthub:get last N      # 直近N件を自動取得
+/cnthub:get connected   # UIで接続されたセッションを取得
 ```
 
 ## MCP ツール
 
 - `list_sessions` - セッション一覧取得
 - `inject_context` - コンテキスト注入
+- `get_connected_sessions` - UIで接続されたセッションのコンテキスト取得
 
 ## 出力フォーマット
 
@@ -58,7 +60,27 @@ description: 過去のセッションからコンテキストを取得
 [コンテキスト出力]
 ```
 
+### UI Connected Sessions (connected)
+
+```markdown
+UIで接続された{N}件のセッションからコンテキストを取得しました。
+
+# UIで接続されたセッションのコンテキスト
+
+## {セッション名} ({セッションID})
+{要約}
+
+**決定事項:**
+- {決定内容}
+
+**変更ファイル:**
+- `{ファイルパス}`
+
+---
+```
+
 ## エラー
 
 - セッションなし: 「完了済みまたはマージ済みのセッションがありません。」
 - API利用不可: 「cnthub APIが利用できません。サーバーがポート3048で起動していることを確認してください。」
+- 接続セッションなし: 「UIで接続されたセッションがありません。NodeEditorでセッションを接続してください。」

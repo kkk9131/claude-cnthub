@@ -384,7 +384,7 @@ Wave 3（改善タスク - 並列実行可）
 
 | 項目 | 内容 |
 |------|------|
-| **状態** | `cc:TODO` |
+| **状態** | `cc:完了` |
 | **優先度** | 🔴 High |
 
 **削除対象ファイル**:
@@ -405,7 +405,7 @@ packages/web/src/
 
 | 項目 | 内容 |
 |------|------|
-| **状態** | `cc:TODO` |
+| **状態** | `cc:完了` |
 | **優先度** | 🟡 Medium |
 
 **変更対象**:
@@ -419,7 +419,7 @@ packages/web/src/
 
 | 項目 | 内容 |
 |------|------|
-| **状態** | `cc:TODO` |
+| **状態** | `cc:完了` |
 | **優先度** | 🔴 High |
 | **API** | `POST /api/sessions/bulk-delete` |
 
@@ -438,7 +438,7 @@ packages/web/src/
 
 | 項目 | 内容 |
 |------|------|
-| **状態** | `cc:TODO` |
+| **状態** | `cc:完了` |
 | **優先度** | 🟡 Medium |
 | **API** | `POST/PUT/DELETE /api/projects` |
 
@@ -456,7 +456,7 @@ packages/web/src/
 
 | 項目 | 内容 |
 |------|------|
-| **状態** | `cc:TODO` |
+| **状態** | `cc:完了` |
 | **優先度** | 🟢 Low |
 | **API** | `DELETE /api/sessions/:id/messages/:id` |
 
@@ -473,7 +473,7 @@ packages/web/src/
 
 | 項目 | 内容 |
 |------|------|
-| **状態** | `cc:TODO` |
+| **状態** | `cc:完了` |
 | **優先度** | 🟢 Low |
 | **API** | `DELETE /api/merges/:id` |
 
@@ -492,7 +492,7 @@ packages/web/src/
 
 | 項目 | 内容 |
 |------|------|
-| **状態** | `cc:TODO` |
+| **状態** | `cc:完了` |
 | **優先度** | 🟡 Medium |
 
 **現状**:
@@ -508,7 +508,7 @@ packages/web/src/
 
 | 項目 | 内容 |
 |------|------|
-| **状態** | `cc:TODO` |
+| **状態** | `cc:完了` |
 | **優先度** | 🟢 Low |
 
 **現状**:
@@ -522,7 +522,29 @@ packages/web/src/
 
 ## 完了条件
 
-- [ ] 全タスク `cc:完了`
-- [ ] ビルド成功 (`bun run build`)
-- [ ] テスト通過 (`bun test`)
-- [ ] 不要ファイルなし
+- [x] 全タスク `cc:完了`
+- [x] ビルド成功 (`bun run build`)
+- [x] テスト通過 (`bun test`) - 436件パス（既存Embedding 5件のみ失敗）
+- [x] 不要ファイルなし
+
+## 完了日
+
+2026-01-05
+
+## 変更ファイル
+
+### 削除
+- `packages/web/src/pages/WorkItemsPage.tsx`
+- `packages/web/src/stores/workItemStore.ts`
+
+### 変更
+- `packages/web/src/App.tsx` - Work Items ルート削除
+- `packages/web/src/components/Sidebar.tsx` - Work Items/Settings ナビ削除
+- `packages/web/src/components/ViewerSidebar.tsx` - 一括削除/プロジェクト管理 UI 追加
+- `packages/web/src/components/ChatView.tsx` - メッセージ削除 UI 追加
+- `packages/web/src/components/icons.tsx` - CheckIcon/PencilIcon 追加
+- `packages/web/src/stores/projectStore.ts` - CRUD 操作追加
+- `packages/web/src/pages/ViewerPage.tsx` - セッション詳細モーダル統合
+
+### 新規
+- `packages/web/src/components/SessionDetailModal.tsx` - セッション詳細モーダル
