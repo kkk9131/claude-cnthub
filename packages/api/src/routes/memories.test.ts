@@ -66,6 +66,7 @@ describe("Memories API", () => {
 
   afterAll(() => {
     closeDatabase();
+    vi.restoreAllMocks();
   });
 
   beforeEach(() => {

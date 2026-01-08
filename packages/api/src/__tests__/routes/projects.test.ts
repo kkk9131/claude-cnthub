@@ -45,8 +45,8 @@ describe("Projects API", () => {
       expect(project.projectId).toMatch(/^ch_pj_/);
       expect(project.name).toBe("Test Project");
       expect(project.path).toBe("/path/to/project");
-      // description is null when not set (SQLite stores null for empty optional fields)
-      expect(project.description).toBeNull();
+      // description is undefined when not set (JSON excludes null fields)
+      expect(project.description).toBeUndefined();
       expect(project.createdAt).toBeDefined();
       expect(project.updatedAt).toBeDefined();
     });

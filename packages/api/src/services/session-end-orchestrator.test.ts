@@ -5,7 +5,15 @@
  * parseTranscriptContent を使用してファイルシステムに依存しないテストを行う。
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  afterAll,
+} from "vitest";
 
 // モック対象モジュール
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
@@ -134,6 +142,10 @@ describe("Session End Orchestrator", () => {
       provider: "local",
       dimension: 384,
     });
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
   });
 
   describe("processSessionEnd", () => {

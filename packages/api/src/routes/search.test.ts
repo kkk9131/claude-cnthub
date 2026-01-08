@@ -1,21 +1,19 @@
 /**
  * セマンティック検索 API のテスト
+ *
+ * ローカルモデル (Transformers.js) が使えるため、セマンティック検索は常に利用可能
  */
 
-import { describe, test, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, test, expect, beforeAll, afterAll } from "vitest";
 import { createApp } from "../app";
 import { runMigrations, resetDatabase, closeDatabase } from "../db";
-
-// Voyage API をモック
-vi.mock("../services/embeddings", () => ({
-  generateQueryEmbedding: vi.fn().mockResolvedValue(null),
-  isEmbeddingAvailable: vi.fn().mockReturnValue(false),
-}));
 
 describe("Search API", () => {
   const app = createApp();
 
   beforeAll(() => {
+    // 環境変数をクリア（ローカルモデルを使用）
+    delete process.env.VOYAGE_API_KEY;
     resetDatabase();
     runMigrations();
   });
@@ -35,29 +33,30 @@ describe("Search API", () => {
       expect(data).toHaveProperty("message");
     });
 
-    test("APIキー未設定時は available: false", async () => {
+    test("ローカルモデルで available: true", async () => {
       const res = await app.request("/api/search/status");
       const data = (await res.json()) as {
         available: boolean;
         message: string;
       };
 
-      expect(data.available).toBe(false);
-      expect(data.message).toContain("VOYAGE_API_KEY");
+      expect(data.available).toBe(true);
+      expect(data.message).toContain("ready");
     });
   });
 
   describe("POST /api/search", () => {
-    test("APIキー未設定時は 503 を返す", async () => {
+    test("ローカルモデルで検索が実行できる", async () => {
       const res = await app.request("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: "テスト検索" }),
       });
 
-      expect(res.status).toBe(503);
-      const data = (await res.json()) as { error: string };
-      expect(data.error).toBe("Semantic search is not available");
+      // ローカルモデルで検索可能（結果は空でも200）
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { results: unknown[] };
+      expect(data.results).toBeDefined();
     });
 
     test("クエリが空の場合は 400 を返す", async () => {
@@ -83,16 +82,21 @@ describe("Search API", () => {
   });
 
   describe("POST /api/search/context", () => {
-    test("APIキー未設定時は 503 を返す", async () => {
+    test("ローカルモデルでコンテキスト検索が実行できる", async () => {
       const res = await app.request("/api/search/context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: "認証機能を実装したい" }),
       });
 
-      expect(res.status).toBe(503);
-      const data = (await res.json()) as { error: string };
-      expect(data.error).toBe("Context injection is not available");
+      // ローカルモデルで検索可能（結果は空でも200）
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        contextText: string;
+        sessionsUsed: number;
+      };
+      expect(data).toHaveProperty("contextText");
+      expect(data).toHaveProperty("sessionsUsed");
     });
 
     test("オプションパラメータのバリデーション", async () => {
