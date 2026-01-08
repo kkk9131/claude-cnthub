@@ -2,7 +2,15 @@
  * コンテキスト注入サービスのテスト
  */
 
-import { describe, test, expect, vi, beforeEach, type Mock } from "vitest";
+import {
+  describe,
+  test,
+  expect,
+  vi,
+  beforeEach,
+  afterAll,
+  type Mock,
+} from "vitest";
 import {
   findRelatedSessions,
   buildRelatedContext,
@@ -36,6 +44,10 @@ const mockGetSummariesBySessionIds = getSummariesBySessionIds as Mock;
 describe("Context Service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterAll(() => {
+    vi.restoreAllMocks();
   });
 
   describe("isContextInjectionAvailable", () => {

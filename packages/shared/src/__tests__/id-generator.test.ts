@@ -15,10 +15,11 @@ describe("ID Generator", () => {
       expect(ID_PREFIXES.MERGE).toBe("ch_mg");
       expect(ID_PREFIXES.PROJECT).toBe("ch_pj");
       expect(ID_PREFIXES.OBSERVATION).toBe("ch_ob");
+      expect(ID_PREFIXES.EDGE).toBe("ch_ed");
     });
 
-    it("should have exactly 4 entity types", () => {
-      expect(Object.keys(ID_PREFIXES)).toHaveLength(4);
+    it("should have exactly 5 entity types", () => {
+      expect(Object.keys(ID_PREFIXES)).toHaveLength(5);
     });
   });
 
@@ -47,6 +48,11 @@ describe("ID Generator", () => {
     it("should generate ID with correct prefix for observation", () => {
       const id = generateSequentialId("OBSERVATION", 1);
       expect(id).toBe("ch_ob_0001");
+    });
+
+    it("should generate ID with correct prefix for edge", () => {
+      const id = generateSequentialId("EDGE", 1);
+      expect(id).toBe("ch_ed_0001");
     });
 
     it("should zero-pad sequence numbers correctly", () => {
@@ -124,6 +130,15 @@ describe("ID Generator", () => {
       });
     });
 
+    it("should parse valid edge ID", () => {
+      const result = parseId("ch_ed_0042");
+      expect(result).toEqual({
+        entityType: "EDGE",
+        prefix: "ch_ed",
+        sequence: 42,
+      });
+    });
+
     it("should return null for invalid ID format", () => {
       expect(parseId("invalid")).toBeNull();
       expect(parseId("ch_ss_")).toBeNull();
@@ -157,6 +172,10 @@ describe("ID Generator", () => {
 
     it("should return true for valid observation ID", () => {
       expect(isValidId("ch_ob_0001")).toBe(true);
+    });
+
+    it("should return true for valid edge ID", () => {
+      expect(isValidId("ch_ed_0001")).toBe(true);
     });
 
     it("should return false for invalid IDs", () => {

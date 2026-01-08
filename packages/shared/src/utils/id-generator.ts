@@ -15,6 +15,7 @@ export const ID_PREFIXES = {
   MERGE: "ch_mg",
   PROJECT: "ch_pj",
   OBSERVATION: "ch_ob",
+  EDGE: "ch_ed",
 } as const;
 
 /**
@@ -40,7 +41,7 @@ const MAX_SEQUENCE = 9999;
 /**
  * IDの正規表現パターン
  */
-const ID_PATTERN = /^(ch_(?:ss|mg|pj|ob))_(\d{4})$/;
+const ID_PATTERN = /^(ch_(?:ss|mg|pj|ob|ed))_(\d{4})$/;
 
 /**
  * パースされたIDの情報

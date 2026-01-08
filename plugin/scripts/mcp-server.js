@@ -218,6 +218,22 @@ const TOOLS = [
       required: ["sourceSessionId", "observationIds", "groupName"],
     },
   },
+  {
+    name: "get_connected_sessions",
+    description:
+      "Get context from sessions connected via UI edges. Returns context from sessions that were connected in the NodeEditor UI.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        format: {
+          type: "string",
+          description: "Output format: summary, full, or changes",
+          enum: ["summary", "full", "changes"],
+          default: "summary",
+        },
+      },
+    },
+  },
 ];
 
 /**
@@ -316,6 +332,10 @@ async function handleToolCall(params, id) {
 
       case "export_observations":
         result = await exportObservations(args);
+        break;
+
+      case "get_connected_sessions":
+        result = await getConnectedSessions(args);
         break;
 
       default:
@@ -783,6 +803,60 @@ async function injectContext({ sessionIds, format = "summary" }) {
   }
 
   return results;
+}
+
+/**
+ * UIで接続されたセッションのコンテキストを取得
+ * @param {Object} options - オプション
+ * @param {string} [options.format="summary"] - 出力形式
+ * @returns {Promise<Object>} 接続セッションのコンテキスト
+ */
+async function getConnectedSessions({ format = "summary" } = {}) {
+  // 現在のセッションIDを取得
+  const currentSessionId = await resolveCurrentSession();
+  if (!currentSessionId) {
+    return {
+      connected: false,
+      message: "現在のセッションが見つかりません。",
+      context: null,
+    };
+  }
+
+  // APIからUIで接続されたセッションのコンテキストを取得
+  const response = await fetchWithTimeout(
+    `${API_URL}/api/inject/connected/${currentSessionId}`
+  );
+
+  if (!response.ok) {
+    console.error(
+      `[cnthub] Failed to get connected sessions: ${response.status}`
+    );
+    throw new Error(
+      "Failed to get connected sessions. Please check the API server."
+    );
+  }
+
+  const data = await response.json();
+
+  if (!data.connected || data.sessionCount === 0) {
+    return {
+      connected: false,
+      message:
+        "UIで接続されたセッションがありません。NodeEditorでセッションを接続してください。",
+      sourceSessionIds: [],
+      context: null,
+    };
+  }
+
+  // format に応じた追加処理が必要な場合はここで対応
+  // 現時点では API からのコンテキストをそのまま返す
+  return {
+    connected: true,
+    sessionCount: data.sessionCount,
+    sourceSessionIds: data.sourceSessionIds,
+    context: data.context,
+    format,
+  };
 }
 
 // Main loop - read JSON-RPC messages from stdin

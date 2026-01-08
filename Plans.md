@@ -48,7 +48,7 @@ Phase 1〜1.7 完了: 基盤構築、Plugin機能、Smart Export、Context Manag
 
 ---
 
-## Phase 2: System Context 可視化 `pm:TODO`
+## Phase 2: System Context 可視化 `cc:完了`
 
 > 目的: Skills, Hooks, MCP, Rules をノードビューで可視化
 
@@ -59,9 +59,9 @@ Phase 1〜1.7 完了: 基盤構築、Plugin機能、Smart Export、Context Manag
 | SYS-03 | Hooks 一覧取得 | 🔴 High | `cc:完了` |
 | SYS-04 | MCP Servers 一覧取得 | 🟡 Medium | `cc:完了` |
 | SYS-05 | CLAUDE.md / Rules 読み取り | 🟡 Medium | `cc:完了` |
-| SYS-06 | UI: Sessions/System 切り替えタブ | 🔴 High | `pm:TODO` |
-| SYS-07 | UI: System ノードビュー | 🔴 High | `pm:TODO` |
-| SYS-08 | UI: プロジェクト接続（共有）機能 | 🟡 Medium | `pm:TODO` |
+| SYS-06 | UI: Sessions/System 切り替えタブ | 🔴 High | `cc:完了` |
+| SYS-07 | UI: System ノードビュー | 🔴 High | `cc:完了` |
+| SYS-08 | UI: プロジェクト接続（共有）機能 | 🟡 Medium | `cc:完了` |
 
 ---
 

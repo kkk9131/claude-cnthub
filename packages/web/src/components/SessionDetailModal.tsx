@@ -5,7 +5,13 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import { XMarkIcon, DocumentIcon, ClockIcon } from "./icons";
+import {
+  XMarkIcon,
+  DocumentIcon,
+  ClockIcon,
+  PencilIcon,
+  CheckIcon,
+} from "./icons";
 
 interface SessionDetail {
   sessionId: string;
@@ -23,16 +29,23 @@ interface SessionDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   sessionId: string | null;
+  onDelete?: (sessionId: string) => void;
+  onNameChange?: (sessionId: string, newName: string) => void;
 }
 
 export function SessionDetailModal({
   isOpen,
   onClose,
   sessionId,
+  onDelete,
+  onNameChange,
 }: SessionDetailModalProps) {
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !sessionId) return;
@@ -82,8 +95,54 @@ export function SessionDetailModal({
   const handleClose = useCallback(() => {
     setSession(null);
     setError(null);
+    setIsEditing(false);
+    setEditName("");
     onClose();
   }, [onClose]);
+
+  // 名前編集を開始
+  const handleStartEdit = useCallback(() => {
+    if (session) {
+      setEditName(session.name);
+      setIsEditing(true);
+    }
+  }, [session]);
+
+  // 名前編集をキャンセル
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false);
+    setEditName("");
+  }, []);
+
+  // 名前を保存
+  const handleSaveName = useCallback(async () => {
+    if (!session || !editName.trim()) return;
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/sessions/${session.sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editName.trim() }),
+      });
+
+      if (!response.ok) {
+        throw new Error("名前の更新に失敗しました");
+      }
+
+      const newName = editName.trim();
+      // ローカル状態を更新
+      setSession({ ...session, name: newName });
+      setIsEditing(false);
+      setEditName("");
+      // 親コンポーネントに通知
+      onNameChange?.(session.sessionId, newName);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "名前の更新に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  }, [session, editName, onNameChange]);
 
   // Escキーでモーダルを閉じる
   useEffect(() => {
@@ -162,9 +221,49 @@ export function SessionDetailModal({
             <div className="space-y-4">
               {/* セッション名 */}
               <div>
-                <h3 className="text-xl font-medium text-[var(--text-primary)]">
-                  {session.name}
-                </h3>
+                {isEditing ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="flex-1 px-3 py-2 text-lg font-medium bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-[var(--color-primary-400)]"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveName();
+                        if (e.key === "Escape") handleCancelEdit();
+                      }}
+                    />
+                    <button
+                      onClick={handleSaveName}
+                      disabled={saving || !editName.trim()}
+                      className="p-2 bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)] disabled:opacity-50 transition-colors"
+                      title="保存"
+                    >
+                      <CheckIcon className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      className="p-2 hover:bg-[var(--bg-elevated)] rounded-lg transition-colors"
+                      title="キャンセル"
+                    >
+                      <XMarkIcon className="w-5 h-5 text-[var(--text-muted)]" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 group">
+                    <h3 className="text-xl font-medium text-[var(--text-primary)]">
+                      {session.name}
+                    </h3>
+                    <button
+                      onClick={handleStartEdit}
+                      className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-[var(--bg-elevated)] rounded-lg transition-all"
+                      title="名前を編集"
+                    >
+                      <PencilIcon className="w-4 h-4 text-[var(--text-muted)]" />
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 mt-2">
                   <span
                     className={`w-2 h-2 rounded-full ${statusColors[session.status] || "bg-gray-500"}`}
@@ -238,7 +337,20 @@ export function SessionDetailModal({
         </div>
 
         {/* フッター */}
-        <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex justify-end flex-shrink-0">
+        <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex justify-between flex-shrink-0">
+          {onDelete && sessionId ? (
+            <button
+              onClick={() => {
+                onDelete(sessionId);
+                handleClose();
+              }}
+              className="px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+            >
+              削除
+            </button>
+          ) : (
+            <div />
+          )}
           <button
             onClick={handleClose}
             className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] rounded-lg transition-colors"
