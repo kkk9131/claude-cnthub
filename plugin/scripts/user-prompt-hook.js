@@ -26,6 +26,8 @@ const {
   fetchWithTimeout,
   API_URL,
   getErrorMessage,
+  log,
+  logError,
 } = require("./hook-utils");
 
 /**
@@ -55,9 +57,7 @@ async function generateSessionName(sessionId, message) {
     );
 
     if (!response.ok) {
-      console.error(
-        `[cnthub] Failed to generate session name: ${response.status}`
-      );
+      log(`[cnthub] Failed to generate session name: ${response.status}`);
       return null;
     }
 
@@ -67,9 +67,7 @@ async function generateSessionName(sessionId, message) {
       cnthubSessionId: result.sessionId || null,
     };
   } catch (error) {
-    console.error(
-      `[cnthub] Error generating session name: ${getErrorMessage(error)}`
-    );
+    log(`[cnthub] Error generating session name: ${getErrorMessage(error)}`);
     return null;
   }
 }
@@ -92,17 +90,13 @@ async function updateSessionName(sessionId, name) {
     );
 
     if (!response.ok) {
-      console.error(
-        `[cnthub] Failed to update session name: ${response.status}`
-      );
+      log(`[cnthub] Failed to update session name: ${response.status}`);
       return false;
     }
 
     return true;
   } catch (error) {
-    console.error(
-      `[cnthub] Error updating session name: ${getErrorMessage(error)}`
-    );
+    log(`[cnthub] Error updating session name: ${getErrorMessage(error)}`);
     return false;
   }
 }
@@ -124,14 +118,10 @@ async function searchRelatedContext(query) {
     if (!response.ok) {
       // 503 means semantic search is not available (no VOYAGE_API_KEY)
       if (response.status === 503) {
-        console.error(
-          "[cnthub] Semantic search not available (no VOYAGE_API_KEY)"
-        );
+        log("[cnthub] Semantic search not available (no VOYAGE_API_KEY)");
         return null;
       }
-      console.error(
-        `[cnthub] Failed to search related context: ${response.status}`
-      );
+      log(`[cnthub] Failed to search related context: ${response.status}`);
       return null;
     }
 
@@ -141,9 +131,7 @@ async function searchRelatedContext(query) {
       sessionsUsed: result.sessionsUsed || 0,
     };
   } catch (error) {
-    console.error(
-      `[cnthub] Error searching related context: ${getErrorMessage(error)}`
-    );
+    log(`[cnthub] Error searching related context: ${getErrorMessage(error)}`);
     return null;
   }
 }
@@ -166,18 +154,14 @@ async function getPendingInject(sessionId) {
     }
 
     if (!response.ok) {
-      console.error(
-        `[cnthub] Failed to get pending inject: ${response.status}`
-      );
+      log(`[cnthub] Failed to get pending inject: ${response.status}`);
       return null;
     }
 
     const result = await response.json();
     return result.context || null;
   } catch (error) {
-    console.error(
-      `[cnthub] Error getting pending inject: ${getErrorMessage(error)}`
-    );
+    log(`[cnthub] Error getting pending inject: ${getErrorMessage(error)}`);
     return null;
   }
 }
@@ -195,9 +179,7 @@ async function getConnectedSessionsContext(sessionId) {
     );
 
     if (!response.ok) {
-      console.error(
-        `[cnthub] Failed to get connected sessions: ${response.status}`
-      );
+      log(`[cnthub] Failed to get connected sessions: ${response.status}`);
       return null;
     }
 
@@ -208,14 +190,10 @@ async function getConnectedSessionsContext(sessionId) {
       return null;
     }
 
-    console.error(
-      `[cnthub] Found ${result.sessionCount} connected sessions from UI`
-    );
+    log(`[cnthub] Found ${result.sessionCount} connected sessions from UI`);
     return result.context || null;
   } catch (error) {
-    console.error(
-      `[cnthub] Error getting connected sessions: ${getErrorMessage(error)}`
-    );
+    log(`[cnthub] Error getting connected sessions: ${getErrorMessage(error)}`);
     return null;
   }
 }
@@ -238,17 +216,13 @@ async function deletePendingInject(sessionId) {
     }
 
     if (!response.ok) {
-      console.error(
-        `[cnthub] Failed to delete pending inject: ${response.status}`
-      );
+      log(`[cnthub] Failed to delete pending inject: ${response.status}`);
       return false;
     }
 
     return true;
   } catch (error) {
-    console.error(
-      `[cnthub] Error deleting pending inject: ${getErrorMessage(error)}`
-    );
+    log(`[cnthub] Error deleting pending inject: ${getErrorMessage(error)}`);
     return false;
   }
 }
@@ -282,9 +256,7 @@ async function isFirstMessage(sessionId) {
     return false;
   } catch (error) {
     // On error, assume first message to be safe
-    console.error(
-      `[cnthub] Error checking first message: ${getErrorMessage(error)}`
-    );
+    log(`[cnthub] Error checking first message: ${getErrorMessage(error)}`);
     return true;
   }
 }
@@ -300,15 +272,13 @@ async function main() {
 
     // Skip if message is empty
     if (!message || typeof message !== "string" || !message.trim()) {
-      console.error("[cnthub] Empty message, skipping");
+      log("[cnthub] Empty message, skipping");
       process.exit(0);
     }
 
     // Skip cnthub commands
     if (isCnthubCommand(message)) {
-      console.error(
-        "[cnthub] cnthub command detected, skipping context injection"
-      );
+      log("[cnthub] cnthub command detected, skipping context injection");
       process.exit(0);
     }
 
@@ -318,7 +288,7 @@ async function main() {
     const firstMessage = await isFirstMessage(sessionId);
 
     if (firstMessage) {
-      console.error("[cnthub] First message detected, processing...");
+      log("[cnthub] First message detected, processing...");
 
       // 1. Generate and update session name
       const result = await generateSessionName(sessionId, message);
@@ -328,16 +298,14 @@ async function main() {
           result.name
         );
         if (updated) {
-          console.error(`[cnthub] Session name updated: ${result.name}`);
+          log(`[cnthub] Session name updated: ${result.name}`);
         }
       }
 
       // 2. Search related sessions and get context
       const relatedContext = await searchRelatedContext(message);
       if (relatedContext && relatedContext.contextText) {
-        console.error(
-          `[cnthub] Found ${relatedContext.sessionsUsed} related sessions`
-        );
+        log(`[cnthub] Found ${relatedContext.sessionsUsed} related sessions`);
         additionalContextParts.push(relatedContext.contextText);
       }
     }
@@ -345,19 +313,19 @@ async function main() {
     // 3. Check for UI-connected sessions (always)
     const connectedContext = await getConnectedSessionsContext(sessionId);
     if (connectedContext) {
-      console.error("[cnthub] Adding connected sessions context");
+      log("[cnthub] Adding connected sessions context");
       additionalContextParts.push(connectedContext);
     }
 
     // 4. Check for pending inject (always, not just first message)
     const pendingContext = await getPendingInject(sessionId);
     if (pendingContext) {
-      console.error("[cnthub] Found pending inject, adding to context");
+      log("[cnthub] Found pending inject, adding to context");
       additionalContextParts.push(pendingContext);
 
       // Delete pending inject after successful retrieval
       await deletePendingInject(sessionId);
-      console.error("[cnthub] Pending inject deleted");
+      log("[cnthub] Pending inject deleted");
     }
 
     // Output additional context if any
@@ -370,19 +338,15 @@ async function main() {
         additionalContext: combinedContext,
       };
       console.log(JSON.stringify(output));
-      console.error(
-        `[cnthub] Context injected (${combinedContext.length} chars)`
-      );
+      log(`[cnthub] Context injected (${combinedContext.length} chars)`);
     }
 
     process.exit(0);
   } catch (error) {
     if (error.name === "AbortError") {
-      console.error("[cnthub] Request timeout");
+      logError("[cnthub] Request timeout");
     } else {
-      console.error(
-        `[cnthub] User prompt hook error: ${getErrorMessage(error)}`
-      );
+      logError(`[cnthub] User prompt hook error: ${getErrorMessage(error)}`);
     }
     process.exit(0);
   }

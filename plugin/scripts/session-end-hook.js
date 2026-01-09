@@ -18,6 +18,8 @@ const {
   sendToAPI,
   isValidTranscriptPath,
   getErrorMessage,
+  log,
+  logError,
 } = require("./hook-utils");
 
 async function main() {
@@ -33,7 +35,7 @@ async function main() {
       if (isValidTranscriptPath(context.transcript_path)) {
         transcriptPath = context.transcript_path;
       } else {
-        console.error("[cnthub] Invalid transcript path, skipping");
+        log("[cnthub] Invalid transcript path, skipping");
       }
     }
 
@@ -51,7 +53,7 @@ async function main() {
     });
 
     if (!response.ok) {
-      console.error(`[cnthub] Failed to end session: ${response.status}`);
+      log(`[cnthub] Failed to end session: ${response.status}`);
       process.exit(0);
     }
 
@@ -66,17 +68,13 @@ async function main() {
     const processingInfo = responseData.processingStarted
       ? " (processing summary)"
       : "";
-    console.error(
-      `[cnthub] Session ended: ${context.session_id}${processingInfo}`
-    );
+    log(`[cnthub] Session ended: ${context.session_id}${processingInfo}`);
     process.exit(0);
   } catch (error) {
     if (error.name === "AbortError") {
-      console.error("[cnthub] Request timeout");
+      logError("[cnthub] Request timeout");
     } else {
-      console.error(
-        `[cnthub] Session end hook error: ${getErrorMessage(error)}`
-      );
+      logError(`[cnthub] Session end hook error: ${getErrorMessage(error)}`);
     }
     process.exit(0);
   }

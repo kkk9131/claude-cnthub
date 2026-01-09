@@ -8,6 +8,28 @@ const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
 
+// サイレントモード（デフォルト: 非表示、CNTHUB_SILENT=false で表示）
+const SILENT_MODE = process.env.CNTHUB_SILENT !== "false";
+
+/**
+ * ログ出力（サイレントモード対応）
+ * @param {...any} args - ログ引数
+ */
+function log(...args) {
+  if (!SILENT_MODE) {
+    console.error(...args);
+  }
+}
+
+/**
+ * エラーログ出力（サイレントモードでも重大なエラーは出力）
+ * @param {...any} args - ログ引数
+ */
+function logError(...args) {
+  // 重大なエラーはサイレントモードでも出力
+  console.error(...args);
+}
+
 // 設定ディレクトリとファイルパス
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || "";
 const CONFIG_DIR = path.join(HOME_DIR, ".claude-cnthub");
@@ -58,9 +80,7 @@ function loadConfig() {
       const content = fs.readFileSync(CONFIG_FILE, "utf-8");
       cachedConfig = { ...DEFAULT_CONFIG, ...JSON.parse(content) };
     } catch (error) {
-      console.error(
-        `[cnthub] Failed to parse config: ${getErrorMessage(error)}`
-      );
+      logError(`[cnthub] Failed to parse config: ${getErrorMessage(error)}`);
       cachedConfig = { ...DEFAULT_CONFIG };
     }
   } else {
@@ -112,7 +132,7 @@ async function readHookContext() {
     return context;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[cnthub] Failed to parse hook context: ${message}`);
+    log(`[cnthub] Failed to parse hook context: ${message}`);
     return null;
   }
 }
@@ -129,7 +149,7 @@ function validateHookContext(context) {
 
   const sessionId = context.session_id;
   if (!sessionId || typeof sessionId !== "string" || sessionId.length === 0) {
-    console.error("[cnthub] Invalid or missing session_id");
+    log("[cnthub] Invalid or missing session_id");
     return false;
   }
 
@@ -194,7 +214,7 @@ function isValidTranscriptPath(filePath) {
 
   // セキュリティ: HOME未定義時は全パスが許可されるのを防止
   if (!homeDir) {
-    console.error("[cnthub] HOME directory not defined");
+    log("[cnthub] HOME directory not defined");
     return false;
   }
 
@@ -205,12 +225,12 @@ function isValidTranscriptPath(filePath) {
     !normalized.startsWith(allowedBase + path.sep) &&
     normalized !== allowedBase
   ) {
-    console.error("[cnthub] Transcript path outside allowed directory");
+    log("[cnthub] Transcript path outside allowed directory");
     return false;
   }
 
   if (!normalized.endsWith(".jsonl")) {
-    console.error("[cnthub] Invalid transcript file extension");
+    log("[cnthub] Invalid transcript file extension");
     return false;
   }
 
@@ -226,15 +246,13 @@ function isValidTranscriptPath(filePath) {
         !realPath.startsWith(realAllowedBase + path.sep) &&
         realPath !== realAllowedBase
       ) {
-        console.error(
-          "[cnthub] Transcript symlink points outside allowed directory"
-        );
+        log("[cnthub] Transcript symlink points outside allowed directory");
         return false;
       }
     }
   } catch (error) {
     // realpathSync が失敗した場合（アクセス権限など）は拒否
-    console.error("[cnthub] Failed to resolve transcript path");
+    log("[cnthub] Failed to resolve transcript path");
     return false;
   }
 
@@ -329,7 +347,7 @@ async function startServer() {
   const projectRoot = path.resolve(pluginRoot, "..");
   const apiDir = path.join(projectRoot, "packages", "api");
 
-  console.error(`[cnthub] Starting API server from: ${apiDir}`);
+  log(`[cnthub] Starting API server from: ${apiDir}`);
 
   try {
     // bun run dev:api をバックグラウンドで起動
@@ -351,10 +369,10 @@ async function startServer() {
       savePid(child.pid);
     }
 
-    console.error(`[cnthub] API server process spawned (PID: ${child.pid})`);
+    log(`[cnthub] API server process spawned (PID: ${child.pid})`);
     return true;
   } catch (error) {
-    console.error(`[cnthub] Failed to start server: ${getErrorMessage(error)}`);
+    logError(`[cnthub] Failed to start server: ${getErrorMessage(error)}`);
     return false;
   }
 }
@@ -368,7 +386,7 @@ function findProcessByPort(port) {
   // ポート番号のバリデーション（コマンドインジェクション対策）
   const portNum = parseInt(port, 10);
   if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-    console.error(`[cnthub] Invalid port number: ${port}`);
+    log(`[cnthub] Invalid port number: ${port}`);
     return null;
   }
 
@@ -397,35 +415,33 @@ async function stopServer() {
     if (await checkServerHealth()) {
       pid = findProcessByPort(config.api.port);
       if (pid) {
-        console.error(
-          `[cnthub] Found server on port ${config.api.port} (PID: ${pid})`
-        );
+        log(`[cnthub] Found server on port ${config.api.port} (PID: ${pid})`);
       } else {
-        console.error("[cnthub] Server is running but could not find PID");
+        log("[cnthub] Server is running but could not find PID");
         return false;
       }
     } else {
-      console.error("[cnthub] Server is not running");
+      log("[cnthub] Server is not running");
       return true;
     }
   }
 
   if (!isProcessRunning(pid)) {
-    console.error("[cnthub] Server process not found, cleaning up PID file");
+    log("[cnthub] Server process not found, cleaning up PID file");
     removePid();
     return true;
   }
 
   try {
     process.kill(pid, "SIGTERM");
-    console.error(`[cnthub] Sent SIGTERM to process ${pid}`);
+    log(`[cnthub] Sent SIGTERM to process ${pid}`);
 
     // 停止を待機（最大5秒）
     for (let i = 0; i < 10; i++) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       if (!isProcessRunning(pid)) {
         removePid();
-        console.error("[cnthub] Server stopped successfully");
+        log("[cnthub] Server stopped successfully");
         return true;
       }
     }
@@ -433,10 +449,10 @@ async function stopServer() {
     // 強制終了
     process.kill(pid, "SIGKILL");
     removePid();
-    console.error("[cnthub] Server force killed");
+    log("[cnthub] Server force killed");
     return true;
   } catch (error) {
-    console.error(`[cnthub] Failed to stop server: ${getErrorMessage(error)}`);
+    logError(`[cnthub] Failed to stop server: ${getErrorMessage(error)}`);
     return false;
   }
 }
@@ -494,11 +510,11 @@ async function waitForServer(timeout = SERVER_STARTUP_TIMEOUT) {
 async function ensureServerRunning() {
   // 既に起動しているか確認
   if (await checkServerHealth()) {
-    console.error("[cnthub] API server is already running");
+    log("[cnthub] API server is already running");
     return true;
   }
 
-  console.error("[cnthub] API server not running, starting...");
+  log("[cnthub] API server not running, starting...");
 
   // サーバーを起動
   const started = await startServer();
@@ -509,11 +525,11 @@ async function ensureServerRunning() {
   // 起動完了を待機
   const ready = await waitForServer();
   if (ready) {
-    console.error("[cnthub] API server is now ready");
+    log("[cnthub] API server is now ready");
     return true;
   }
 
-  console.error("[cnthub] API server failed to start within timeout");
+  logError("[cnthub] API server failed to start within timeout");
   return false;
 }
 
@@ -588,7 +604,7 @@ async function startWeb() {
   const projectRoot = path.resolve(pluginRoot, "..");
   const webDir = path.join(projectRoot, "packages", "web");
 
-  console.error(`[cnthub] Starting Web frontend from: ${webDir}`);
+  log(`[cnthub] Starting Web frontend from: ${webDir}`);
 
   try {
     const child = spawn("bun", ["run", "dev"], {
@@ -607,10 +623,10 @@ async function startWeb() {
       saveWebPid(child.pid);
     }
 
-    console.error(`[cnthub] Web frontend process spawned (PID: ${child.pid})`);
+    log(`[cnthub] Web frontend process spawned (PID: ${child.pid})`);
     return true;
   } catch (error) {
-    console.error(`[cnthub] Failed to start web: ${getErrorMessage(error)}`);
+    logError(`[cnthub] Failed to start web: ${getErrorMessage(error)}`);
     return false;
   }
 }
@@ -627,44 +643,42 @@ async function stopWeb() {
     if (await checkWebHealth()) {
       pid = findProcessByPort(webConfig.port);
       if (pid) {
-        console.error(
-          `[cnthub] Found web on port ${webConfig.port} (PID: ${pid})`
-        );
+        log(`[cnthub] Found web on port ${webConfig.port} (PID: ${pid})`);
       } else {
-        console.error("[cnthub] Web is running but could not find PID");
+        log("[cnthub] Web is running but could not find PID");
         return false;
       }
     } else {
-      console.error("[cnthub] Web is not running");
+      log("[cnthub] Web is not running");
       return true;
     }
   }
 
   if (!isProcessRunning(pid)) {
-    console.error("[cnthub] Web process not found, cleaning up PID file");
+    log("[cnthub] Web process not found, cleaning up PID file");
     removeWebPid();
     return true;
   }
 
   try {
     process.kill(pid, "SIGTERM");
-    console.error(`[cnthub] Sent SIGTERM to web process ${pid}`);
+    log(`[cnthub] Sent SIGTERM to web process ${pid}`);
 
     for (let i = 0; i < 10; i++) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       if (!isProcessRunning(pid)) {
         removeWebPid();
-        console.error("[cnthub] Web stopped successfully");
+        log("[cnthub] Web stopped successfully");
         return true;
       }
     }
 
     process.kill(pid, "SIGKILL");
     removeWebPid();
-    console.error("[cnthub] Web force killed");
+    log("[cnthub] Web force killed");
     return true;
   } catch (error) {
-    console.error(`[cnthub] Failed to stop web: ${getErrorMessage(error)}`);
+    logError(`[cnthub] Failed to stop web: ${getErrorMessage(error)}`);
     return false;
   }
 }
@@ -698,17 +712,17 @@ async function ensureWebRunning() {
 
   // 自動起動が無効の場合はスキップ
   if (!webConfig.autoStart) {
-    console.error("[cnthub] Web auto-start is disabled");
+    log("[cnthub] Web auto-start is disabled");
     return false;
   }
 
   // 既に起動しているか確認
   if (await checkWebHealth()) {
-    console.error("[cnthub] Web frontend is already running");
+    log("[cnthub] Web frontend is already running");
     return true;
   }
 
-  console.error("[cnthub] Web frontend not running, starting...");
+  log("[cnthub] Web frontend not running, starting...");
 
   const started = await startWeb();
   if (!started) {
@@ -717,11 +731,11 @@ async function ensureWebRunning() {
 
   const ready = await waitForWeb();
   if (ready) {
-    console.error("[cnthub] Web frontend is now ready");
+    log("[cnthub] Web frontend is now ready");
     return true;
   }
 
-  console.error("[cnthub] Web frontend failed to start within timeout");
+  logError("[cnthub] Web frontend failed to start within timeout");
   return false;
 }
 
@@ -732,6 +746,9 @@ module.exports = {
   CONFIG_FILE,
   PID_FILE,
   WEB_PID_FILE,
+  // Silent mode logging
+  log,
+  logError,
   readHookContext,
   validateHookContext,
   fetchWithTimeout,
