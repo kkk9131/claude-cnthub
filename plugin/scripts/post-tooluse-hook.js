@@ -18,6 +18,8 @@ const {
   validateHookContext,
   sendToAPI,
   getErrorMessage,
+  log,
+  logError,
 } = require("./hook-utils");
 
 /**
@@ -96,7 +98,7 @@ async function main() {
     });
 
     if (!response.ok) {
-      console.error(`[cnthub] Failed to record tool use: ${response.status}`);
+      log(`[cnthub] Failed to record tool use: ${response.status}`);
       process.exit(0);
     }
 
@@ -104,11 +106,9 @@ async function main() {
     process.exit(0);
   } catch (error) {
     if (error.name === "AbortError") {
-      console.error("[cnthub] Request timeout");
+      logError("[cnthub] Request timeout");
     } else {
-      console.error(
-        `[cnthub] PostToolUse hook error: ${getErrorMessage(error)}`
-      );
+      logError(`[cnthub] PostToolUse hook error: ${getErrorMessage(error)}`);
     }
     process.exit(0);
   }

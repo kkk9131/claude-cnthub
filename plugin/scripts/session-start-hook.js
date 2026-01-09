@@ -27,6 +27,8 @@ const {
   getErrorMessage,
   ensureServerRunning,
   ensureWebRunning,
+  log,
+  logError,
 } = require("./hook-utils");
 
 async function main() {
@@ -39,9 +41,7 @@ async function main() {
     // サーバーが起動していることを保証
     const serverReady = await ensureServerRunning();
     if (!serverReady) {
-      console.error(
-        "[cnthub] API server not available, skipping session registration"
-      );
+      log("[cnthub] API server not available, skipping session registration");
       process.exit(0);
     }
 
@@ -63,14 +63,12 @@ async function main() {
     });
 
     if (!response.ok) {
-      console.error(`[cnthub] Failed to register session: ${response.status}`);
+      log(`[cnthub] Failed to register session: ${response.status}`);
       process.exit(0);
     }
 
     const result = await response.json();
-    console.error(
-      `[cnthub] Session registered: ${result.id || context.session_id}`
-    );
+    log(`[cnthub] Session registered: ${result.id || context.session_id}`);
 
     // No context injection here - will be handled by UserPromptSubmit hook
     // when user's first prompt provides intent for related session search
@@ -78,11 +76,9 @@ async function main() {
     process.exit(0);
   } catch (error) {
     if (error.name === "AbortError") {
-      console.error("[cnthub] Request timeout");
+      logError("[cnthub] Request timeout");
     } else {
-      console.error(
-        `[cnthub] Session start hook error: ${getErrorMessage(error)}`
-      );
+      logError(`[cnthub] Session start hook error: ${getErrorMessage(error)}`);
     }
     process.exit(0);
   }
