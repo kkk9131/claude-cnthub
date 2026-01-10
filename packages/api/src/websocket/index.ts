@@ -119,7 +119,29 @@ type ServerMessage =
   | { type: "left"; sessionId: string }
   | { type: "new-message"; message: Message }
   | { type: "typing"; sessionId: string; isTyping: boolean }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "edge_created"; edge: EdgeEvent }
+  | { type: "edge_deleted"; edgeId: string; remainingContext?: string }
+  | { type: "tokens_updated"; tokens: TokensUpdatedEvent };
+
+/**
+ * Edge イベント型
+ */
+interface EdgeEvent {
+  edgeId: string;
+  sourceSessionId: string;
+  targetClaudeSessionId: string;
+  createdAt: string;
+}
+
+/**
+ * トークン更新イベント型
+ */
+interface TokensUpdatedEvent {
+  sessionId: string;
+  inputTokens: number;
+  outputTokens: number;
+}
 
 // セッションごとのクライアント管理
 // sessionId → Set<WebSocket>
@@ -418,4 +440,73 @@ export function getClientCount(): number {
  */
 export function getSessionClientCount(sessionId: string): number {
   return sessionClients.get(sessionId)?.size ?? 0;
+}
+
+/**
+ * 全クライアントにブロードキャスト
+ *
+ * Edge作成/削除イベントなど、全ユーザーに通知が必要な場合に使用
+ */
+export function broadcastToAll(message: ServerMessage): void {
+  const json = JSON.stringify(message);
+  for (const client of allClients) {
+    try {
+      client.send(json);
+    } catch (error) {
+      console.error("[WebSocket] Failed to send to client:", error);
+    }
+  }
+}
+
+/**
+ * Edge作成イベントを全クライアントにブロードキャスト
+ */
+export function emitEdgeCreated(edge: {
+  edgeId: string;
+  sourceSessionId: string;
+  targetClaudeSessionId: string;
+  createdAt: Date;
+}): void {
+  const event: EdgeEvent = {
+    edgeId: edge.edgeId,
+    sourceSessionId: edge.sourceSessionId,
+    targetClaudeSessionId: edge.targetClaudeSessionId,
+    createdAt: edge.createdAt.toISOString(),
+  };
+  broadcastToAll({ type: "edge_created", edge: event });
+  console.log(
+    `[WebSocket] Edge created: ${edge.sourceSessionId} -> ${edge.targetClaudeSessionId}`
+  );
+}
+
+/**
+ * Edge削除イベントを全クライアントにブロードキャスト
+ *
+ * @param edgeId - 削除されたEdgeのID
+ * @param remainingContext - 残りのセッションのpending context（/clear通知用）
+ */
+export function emitEdgeDeleted(
+  edgeId: string,
+  remainingContext?: string
+): void {
+  broadcastToAll({ type: "edge_deleted", edgeId, remainingContext });
+  console.log(`[WebSocket] Edge deleted: ${edgeId}`);
+}
+
+/**
+ * トークン更新イベントを全クライアントにブロードキャスト
+ *
+ * @param sessionId - セッションID（cnthub形式）
+ * @param inputTokens - 入力トークン数
+ * @param outputTokens - 出力トークン数
+ */
+export function emitTokensUpdated(
+  sessionId: string,
+  inputTokens: number,
+  outputTokens: number
+): void {
+  broadcastToAll({
+    type: "tokens_updated",
+    tokens: { sessionId, inputTokens, outputTokens },
+  });
 }

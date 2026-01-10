@@ -24,6 +24,7 @@ import {
   Position,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useWebSocketStore } from "../stores/websocket";
 
 // localStorage キー
 const STORAGE_KEY_POSITIONS = "cnthub-node-positions";
@@ -140,6 +141,26 @@ function findNonOverlappingPosition(
 
   // 見つからない場合は右にオフセット
   return { x: pos.x + step * 3, y: pos.y };
+}
+
+function resolveOverlaps(nodes: Node[]): { nodes: Node[]; changed: boolean } {
+  const resolved: Node[] = [];
+  let changed = false;
+
+  for (const node of nodes) {
+    const nextNode = { ...node };
+    const newPos = findNonOverlappingPosition(nextNode, [
+      ...resolved,
+      nextNode,
+    ]);
+    if (newPos.x !== nextNode.position.x || newPos.y !== nextNode.position.y) {
+      nextNode.position = newPos;
+      changed = true;
+    }
+    resolved.push(nextNode);
+  }
+
+  return { nodes: resolved, changed };
 }
 
 // グリッド配置で重ならない位置を計算（8方向探索）
@@ -908,17 +929,19 @@ export function NodeEditor({
         });
 
       const result = [...updatedNodes, ...newContextNodes];
+      const resolved = resolveOverlaps(result);
+      const finalNodes = resolved.changed ? resolved.nodes : result;
 
       // 新しいノードが追加されたら位置を保存
       if (newContextNodes.length > 0) {
         const allPositions: StoredPositions = {};
-        result.forEach((n) => {
+        finalNodes.forEach((n) => {
           allPositions[n.id] = n.position;
         });
         savePositions(allPositions);
       }
 
-      return result;
+      return finalNodes;
     });
   }, [
     currentSessionsData,
@@ -1043,17 +1066,19 @@ export function NodeEditor({
       );
 
       const result = [...filteredNodes, ...newSessionNodes];
+      const resolved = resolveOverlaps(result);
+      const finalNodes = resolved.changed ? resolved.nodes : result;
 
       // 新しいノードが追加されたら位置を保存
       if (newSessionNodes.length > 0) {
         const allPositions: StoredPositions = {};
-        result.forEach((n) => {
+        finalNodes.forEach((n) => {
           allPositions[n.id] = n.position;
         });
         savePositions(allPositions);
       }
 
-      return result;
+      return finalNodes;
     });
   }, [sessions, projectMap, setNodes, theme, onSessionDetail]);
 
@@ -1131,6 +1156,96 @@ export function NodeEditor({
 
     loadEdgesForContextNodes();
   }, [currentSessionsData, setEdges]);
+
+  // WebSocket edge_created イベントを監視してEdgeを自動追加
+  const lastEdgeCreated = useWebSocketStore((s) => s.lastEdgeCreated);
+  const clearEdgeEvents = useWebSocketStore((s) => s.clearEdgeEvents);
+
+  useEffect(() => {
+    if (!lastEdgeCreated) return;
+
+    const { edgeId, sourceSessionId, targetClaudeSessionId } = lastEdgeCreated;
+    const reactFlowEdgeId = `reactflow__edge-session-${sourceSessionId}-context-${targetClaudeSessionId}`;
+
+    // 既に存在するEdgeはスキップ
+    setEdges((eds) => {
+      if (eds.some((e) => e.id === reactFlowEdgeId)) {
+        return eds;
+      }
+
+      const newEdge: Edge = {
+        id: reactFlowEdgeId,
+        source: `session-${sourceSessionId}`,
+        target: `context-${targetClaudeSessionId}`,
+      };
+
+      const result = [...eds, newEdge];
+      saveEdges(result);
+      return result;
+    });
+
+    // Edge mapping を更新
+    setEdgeMapping((prev) => ({
+      ...prev,
+      [reactFlowEdgeId]: edgeId,
+    }));
+
+    // Connected sessions を更新
+    setConnectedSessionIds((prev) => {
+      if (prev.includes(sourceSessionId)) return prev;
+      const combined = [...prev, sourceSessionId];
+      saveConnectedSessions(combined);
+      return combined;
+    });
+
+    // ノードのconnectedCountを更新
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.id === `context-${targetClaudeSessionId}`) {
+          const currentCount =
+            typeof node.data.connectedCount === "number"
+              ? node.data.connectedCount
+              : 0;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              connectedCount: currentCount + 1,
+            },
+          };
+        }
+        return node;
+      })
+    );
+
+    // イベントをクリア
+    clearEdgeEvents();
+
+    console.log(
+      `[NodeEditor] Edge created via WebSocket: ${sourceSessionId} -> ${targetClaudeSessionId}`
+    );
+  }, [lastEdgeCreated, setEdges, setNodes, clearEdgeEvents]);
+
+  // WebSocket edge_deleted イベントを監視して/clear通知を表示
+  const lastEdgeDeleted = useWebSocketStore((s) => s.lastEdgeDeleted);
+  const [showClearNotification, setShowClearNotification] = useState(false);
+
+  useEffect(() => {
+    if (!lastEdgeDeleted) return;
+
+    const { edgeId, remainingContext } = lastEdgeDeleted;
+
+    // 残りのコンテキストがある場合は/clear通知を表示
+    if (remainingContext) {
+      setShowClearNotification(true);
+      console.log(
+        `[NodeEditor] Edge deleted via WebSocket: ${edgeId}. Context pending for /clear.`
+      );
+    }
+
+    // イベントをクリア
+    clearEdgeEvents();
+  }, [lastEdgeDeleted, clearEdgeEvents]);
 
   const onConnect = useCallback(
     async (params: Connection) => {
@@ -1357,7 +1472,7 @@ export function NodeEditor({
 
   return (
     <div
-      className={`w-full h-full bg-[var(--bg-base)] ${
+      className={`w-full h-full bg-[var(--bg-base)] relative ${
         theme === "dark" ? "react-flow-theme-dark" : ""
       }`}
     >
@@ -1382,6 +1497,30 @@ export function NodeEditor({
           maskColor="rgba(15, 15, 14, 0.8)"
         />
       </ReactFlow>
+
+      {/* /clear 通知 */}
+      {showClearNotification && (
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-yellow-500/90 text-black px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 max-w-md">
+            <span className="text-xl">⚠️</span>
+            <div className="flex-1">
+              <div className="font-semibold">コンテキストが変更されました</div>
+              <div className="text-sm opacity-80">
+                Claude Code で{" "}
+                <code className="bg-black/20 px-1 rounded">/clear</code>{" "}
+                を実行してください。残りのセッションは自動的に復元されます。
+              </div>
+            </div>
+            <button
+              onClick={() => setShowClearNotification(false)}
+              className="text-black/60 hover:text-black transition-colors"
+              aria-label="通知を閉じる"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

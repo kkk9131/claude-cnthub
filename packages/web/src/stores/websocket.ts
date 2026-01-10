@@ -7,7 +7,11 @@
 
 import { create } from "zustand";
 import type { Message } from "@claude-cnthub/shared";
-import { wsClient, type ConnectionState } from "../lib/websocket";
+import {
+  wsClient,
+  type ConnectionState,
+  type EdgeEvent,
+} from "../lib/websocket";
 
 // ==================== 型定義 ====================
 
@@ -26,6 +30,12 @@ interface WebSocketState {
 
   /** 最後のエラーメッセージ */
   lastError: string | null;
+
+  /** 最後に作成されたEdge（NodeEditorで購読） */
+  lastEdgeCreated: EdgeEvent | null;
+
+  /** 最後に削除されたEdge情報 */
+  lastEdgeDeleted: { edgeId: string; remainingContext?: string } | null;
 }
 
 interface WebSocketActions {
@@ -50,6 +60,9 @@ interface WebSocketActions {
   /** エラーをクリア */
   clearError: () => void;
 
+  /** Edgeイベントをクリア */
+  clearEdgeEvents: () => void;
+
   /** ストアをリセット */
   reset: () => void;
 }
@@ -64,6 +77,8 @@ const initialState: WebSocketState = {
   messages: [],
   typingSessionId: null,
   lastError: null,
+  lastEdgeCreated: null,
+  lastEdgeDeleted: null,
 };
 
 // ==================== 定数 ====================
@@ -136,6 +151,14 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => {
 
   wsClient.onError = (error) => {
     set({ lastError: error });
+  };
+
+  wsClient.onEdgeCreated = (edge) => {
+    set({ lastEdgeCreated: edge });
+  };
+
+  wsClient.onEdgeDeleted = (edgeId, remainingContext) => {
+    set({ lastEdgeDeleted: { edgeId, remainingContext } });
   };
 
   return {
@@ -235,6 +258,10 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => {
 
     clearError: () => {
       set({ lastError: null });
+    },
+
+    clearEdgeEvents: () => {
+      set({ lastEdgeCreated: null, lastEdgeDeleted: null });
     },
 
     reset: () => {

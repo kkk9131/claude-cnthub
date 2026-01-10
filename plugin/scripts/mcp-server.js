@@ -690,6 +690,40 @@ async function createObservation(sessionId, data) {
 }
 
 /**
+ * Edge作成API呼び出し
+ * @param {string} sourceSessionId - ソースセッションID
+ * @param {string} targetClaudeSessionId - ターゲットのClaude Session ID
+ * @returns {Promise<Object|null>} 作成されたEdge、または失敗時はnull
+ */
+async function createEdgeApi(sourceSessionId, targetClaudeSessionId) {
+  try {
+    const response = await fetchWithTimeout(`${API_URL}/api/edges`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceSessionId, targetClaudeSessionId }),
+    });
+
+    if (!response.ok) {
+      // 409はEdge既存、他のエラーも無視（既にあれば問題ない）
+      if (response.status === 409) {
+        console.error(
+          `[cnthub] Edge already exists: ${sourceSessionId} -> ${targetClaudeSessionId}`
+        );
+        return null;
+      }
+      console.error(`[cnthub] Failed to create edge: ${response.status}`);
+      return null;
+    }
+
+    return await response.json();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[cnthub] Error creating edge: ${message}`);
+    return null;
+  }
+}
+
+/**
  * コンテキスト注入（並列処理）
  * @param {Object} options - オプション
  * @param {string[]} options.sessionIds - セッション ID 配列
@@ -795,6 +829,16 @@ async function injectContext({ sessionIds, format = "summary" }) {
           injectedAt: new Date().toISOString(),
         },
       });
+
+      // Edge作成（UI同期用）- 各セッションからcurrentSessionへのEdgeを作成
+      // これによりWebSocket経由でUIに通知される
+      const successfulSessionIds = results
+        .filter((r) => !r.error)
+        .map((r) => r.id);
+
+      for (const sourceSessionId of successfulSessionIds) {
+        await createEdgeApi(sourceSessionId, currentSessionId);
+      }
     }
   } catch (error) {
     // 記録に失敗しても注入自体は成功とする

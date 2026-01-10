@@ -306,6 +306,94 @@ if (process.env.NODE_ENV !== "test") {
   setInterval(cleanupExpiredEntries, 5 * 60 * 1000);
 }
 
+// ==================== 内部API ====================
+
+/**
+ * pending_injectにコンテキストを追加（内部API）
+ *
+ * Edge作成時に呼び出される
+ *
+ * @param sessionId - ターゲットのClaude Session ID
+ * @param context - 注入するコンテキスト文字列
+ * @param append - 既存のコンテキストに追記するか（デフォルト: true）
+ */
+export function addPendingInject(
+  sessionId: string,
+  context: string,
+  append: boolean = true
+): void {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + DEFAULT_TTL_MS);
+
+  const existing = pendingInjectStore.get(sessionId);
+
+  // 期限切れの場合は削除
+  if (existing && existing.expiresAt <= now) {
+    pendingInjectStore.delete(sessionId);
+  }
+
+  const currentContext =
+    existing && existing.expiresAt > now ? existing.context : "";
+
+  const newContext =
+    append && currentContext
+      ? `${currentContext}\n\n---\n\n${context}`
+      : context;
+
+  const entry: PendingInject = {
+    sessionId,
+    context: newContext,
+    createdAt: existing?.createdAt || now,
+    expiresAt,
+  };
+
+  pendingInjectStore.set(sessionId, entry);
+}
+
+/**
+ * pending_injectのコンテキストを取得して削除（内部API）
+ *
+ * @param sessionId - ターゲットのClaude Session ID
+ * @returns コンテキスト文字列、存在しない場合はnull
+ */
+export function consumePendingInject(sessionId: string): string | null {
+  const entry = pendingInjectStore.get(sessionId);
+
+  if (!entry) {
+    return null;
+  }
+
+  // 期限切れの場合は削除してnull
+  const now = new Date();
+  if (entry.expiresAt <= now) {
+    pendingInjectStore.delete(sessionId);
+    return null;
+  }
+
+  // 取得後に削除
+  pendingInjectStore.delete(sessionId);
+  return entry.context;
+}
+
+/**
+ * pending_injectが存在するか確認（内部API）
+ *
+ * @param sessionId - ターゲットのClaude Session ID
+ * @returns 存在する場合true
+ */
+export function hasPendingInject(sessionId: string): boolean {
+  const entry = pendingInjectStore.get(sessionId);
+  if (!entry) return false;
+
+  const now = new Date();
+  if (entry.expiresAt <= now) {
+    pendingInjectStore.delete(sessionId);
+    return false;
+  }
+
+  return true;
+}
+
 // ==================== テスト用エクスポート ====================
 
 export { injectRouter, pendingInjectStore, cleanupExpiredEntries };
