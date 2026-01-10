@@ -29,9 +29,10 @@ import { closeDatabase, runMigrations, execute } from "../db";
 // モック: Embedding API
 vi.mock("../services/embeddings", () => ({
   generateEmbedding: vi.fn(async (text: string) => ({
-    embedding: new Array(1536).fill(0.1),
-    model: "text-embedding-3-small",
-    tokenCount: text.length / 4,
+    // sqlite-vec の既定次元 (voyage: 1024) に合わせる
+    embedding: new Array(1024).fill(0.1),
+    totalTokens: Math.ceil(text.length / 4),
+    dimension: 1024,
   })),
   isEmbeddingAvailable: vi.fn(() => true),
 }));
