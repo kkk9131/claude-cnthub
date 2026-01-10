@@ -17,6 +17,7 @@ const {
   validateHookContext,
   sendToAPI,
   isValidTranscriptPath,
+  getTotalUsageFromTranscript,
   getErrorMessage,
   log,
   logError,
@@ -31,15 +32,23 @@ async function main() {
 
     // transcript_path を検証（存在する場合のみ）
     let transcriptPath = null;
+    let usage = null;
     if (context.transcript_path) {
       if (isValidTranscriptPath(context.transcript_path)) {
         transcriptPath = context.transcript_path;
+        // トランスクリプトからトークン合計を計算
+        usage = getTotalUsageFromTranscript(transcriptPath);
+        if (usage) {
+          log(
+            `[cnthub] Token usage: in=${usage.inputTokens}, out=${usage.outputTokens}`
+          );
+        }
       } else {
         log("[cnthub] Invalid transcript path, skipping");
       }
     }
 
-    const response = await sendToAPI("/hook/session-end", {
+    const payload = {
       sessionId: context.session_id,
       // 直接フィールドとして送信（優先される）
       transcriptPath: transcriptPath,
@@ -50,7 +59,14 @@ async function main() {
         transcriptPath: transcriptPath,
         cwd: context.cwd,
       },
-    });
+    };
+
+    // トークン情報があれば追加
+    if (usage) {
+      payload.usage = usage;
+    }
+
+    const response = await sendToAPI("/hook/session-end", payload);
 
     if (!response.ok) {
       log(`[cnthub] Failed to end session: ${response.status}`);

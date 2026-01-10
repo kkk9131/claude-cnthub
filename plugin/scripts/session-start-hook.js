@@ -3,7 +3,8 @@
  * Session Start Hook
  *
  * Called when a new Claude Code session starts.
- * Registers the session with cnthub API.
+ * - Registers the session with cnthub API
+ * - Caches transcript_path for use in PostToolUse hook
  *
  * Note: Context injection is NOT performed here because at session start,
  * we don't know what the user wants to work on yet. Related session search
@@ -27,6 +28,7 @@ const {
   getErrorMessage,
   ensureServerRunning,
   ensureWebRunning,
+  saveTranscriptPath,
   log,
   logError,
 } = require("./hook-utils");
@@ -69,6 +71,12 @@ async function main() {
 
     const result = await response.json();
     log(`[cnthub] Session registered: ${result.id || context.session_id}`);
+
+    // transcript_path をキャッシュに保存（PostToolUse hookで使用）
+    if (context.transcript_path) {
+      saveTranscriptPath(context.session_id, context.transcript_path);
+      log(`[cnthub] Transcript path cached for session: ${context.session_id}`);
+    }
 
     // No context injection here - will be handled by UserPromptSubmit hook
     // when user's first prompt provides intent for related session search

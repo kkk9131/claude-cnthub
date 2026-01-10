@@ -3,7 +3,11 @@
  * PostToolUse Hook
  *
  * Called after a tool is used in Claude Code.
- * Records tool usage as an observation in cnthub.
+ * - Records tool usage as an observation
+ * - Updates session token counts from transcript
+ *
+ * Note: transcript_path is not provided by Claude Code in PostToolUse.
+ * We retrieve it from cache (saved during SessionStart).
  *
  * Input (stdin JSON):
  * - session_id: string
@@ -17,6 +21,8 @@ const {
   readHookContext,
   validateHookContext,
   sendToAPI,
+  getTotalUsageFromTranscript,
+  getTranscriptPath,
   getErrorMessage,
   log,
   logError,
@@ -72,7 +78,12 @@ async function main() {
       process.exit(0);
     }
 
-    const { session_id, tool_name, tool_input, tool_output } = context;
+    const { session_id, tool_name, tool_input, tool_output, transcript_path } =
+      context;
+
+    // transcript_path がない場合はキャッシュから取得
+    const resolvedTranscriptPath =
+      transcript_path || getTranscriptPath(session_id);
 
     // ツール名が無い場合はスキップ
     if (!tool_name || typeof tool_name !== "string") {
@@ -86,7 +97,10 @@ async function main() {
         : JSON.stringify(tool_output, null, 2)
     );
 
-    const response = await sendToAPI("/hook/post-tooluse", {
+    // トランスクリプトからセッション全体のusage情報を取得
+    const usage = getTotalUsageFromTranscript(resolvedTranscriptPath);
+
+    const payload = {
       sessionId: session_id,
       toolName: tool_name,
       title,
@@ -95,7 +109,14 @@ async function main() {
         tool_input:
           typeof tool_input === "object" ? JSON.stringify(tool_input) : null,
       },
-    });
+    };
+
+    // usage情報があれば追加
+    if (usage) {
+      payload.usage = usage;
+    }
+
+    const response = await sendToAPI("/hook/post-tooluse", payload);
 
     if (!response.ok) {
       log(`[cnthub] Failed to record tool use: ${response.status}`);

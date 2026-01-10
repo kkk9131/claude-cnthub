@@ -391,6 +391,14 @@ const IMPORTANCE_STYLES: Record<string, string> = {
   low: "bg-gray-500/20 text-gray-400 border-gray-500/50",
 };
 
+const CATEGORY_ICONS: Record<string, string> = {
+  feature: "F",
+  bugfix: "B",
+  refactor: "R",
+  exploration: "E",
+  other: "O",
+};
+
 // カテゴリのラベル
 const CATEGORY_LABELS: Record<string, string> = {
   feature: "機能追加",
@@ -473,40 +481,68 @@ function SessionNode({ data }: { data: SessionNodeData }) {
           {formatTokenCount(data.outputTokens || 0)}
         </div>
       )}
-      <div className="text-sm font-medium text-[var(--text-primary)] truncate">
+      <div className="text-sm font-semibold text-white truncate">
         {data.label}
       </div>
       <div className="flex items-center gap-2 mt-1">
-        {data.date && (
-          <span className="text-xs text-[var(--text-muted)]">{data.date}</span>
-        )}
-        {data.projectName && (
-          <span
-            className="px-1.5 py-0.5 bg-[var(--bg-elevated)] rounded text-[10px] text-[var(--text-secondary)] truncate max-w-[70px]"
-            title={data.projectName}
-          >
-            {data.projectName}
-          </span>
-        )}
-        {/* 重要度バッジ */}
-        {data.importance && data.importance !== "medium" && (
-          <span
-            className={`px-1 py-0.5 rounded text-[8px] font-bold border ${IMPORTANCE_STYLES[data.importance] || ""}`}
-            title={`重要度: ${data.importance}`}
-          >
-            {data.importance === "high" ? "HIGH" : "LOW"}
-          </span>
-        )}
-        {/* カテゴリバッジ */}
-        {data.category && (
-          <span
-            className="px-1 py-0.5 bg-[var(--bg-elevated)] rounded text-[8px] text-[var(--text-muted)]"
-            title={CATEGORY_LABELS[data.category] || data.category}
-          >
-            {CATEGORY_LABELS[data.category] || data.category}
-          </span>
-        )}
+        <div className="flex items-center gap-2 min-w-0">
+          {data.date && (
+            <span className="text-xs text-[var(--text-secondary)]">
+              {data.date}
+            </span>
+          )}
+          {data.projectName && (
+            <span
+              className="px-1.5 py-0.5 bg-[var(--bg-elevated)] rounded text-[10px] text-[var(--text-primary)] truncate max-w-[70px]"
+              title={data.projectName}
+            >
+              {data.projectName}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 ml-auto shrink-0">
+          {/* 重要度: アイコン表示 */}
+          {data.importance && data.importance !== "medium" && (
+            <span
+              className={`w-4 h-4 rounded border text-[9px] font-bold flex items-center justify-center ${IMPORTANCE_STYLES[data.importance] || ""}`}
+              title={`重要度: ${data.importance}`}
+              aria-label={`重要度: ${data.importance}`}
+            >
+              {data.importance === "high" ? "H" : "L"}
+            </span>
+          )}
+          {/* カテゴリ: アイコン表示 */}
+          {data.category && (
+            <span
+              className="w-4 h-4 rounded bg-[var(--bg-elevated)] text-[9px] font-semibold text-[var(--text-secondary)] flex items-center justify-center"
+              title={CATEGORY_LABELS[data.category] || data.category}
+              aria-label={CATEGORY_LABELS[data.category] || data.category}
+            >
+              {CATEGORY_ICONS[data.category] ||
+                CATEGORY_LABELS[data.category]?.[0] ||
+                "O"}
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Hover detail */}
+      {(data.category || (data.importance && data.importance !== "medium")) && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-20 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+          <div className="px-2 py-1 rounded-md bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[10px] text-[var(--text-primary)] shadow-lg flex items-center gap-2">
+            {data.importance && data.importance !== "medium" && (
+              <span className="font-semibold">
+                重要度: {data.importance === "high" ? "高" : "低"}
+              </span>
+            )}
+            {data.category && (
+              <span className="text-[var(--text-secondary)]">
+                {CATEGORY_LABELS[data.category] || data.category}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
