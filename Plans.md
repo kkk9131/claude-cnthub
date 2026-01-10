@@ -53,21 +53,21 @@ Phase 0〜2 完了: 基盤構築、Plugin機能、Smart Export、Context Managem
 
 > 目的: セッションの品質可視化、自動コンテキスト注入、ネガティブ学習
 
-### Wave 1: トークン・品質可視化
+### Wave 1: トークン・品質可視化 ✅
 
 | ID | タスク | 優先度 | 状態 |
 |----|--------|--------|------|
-| TOK-01 | リアルトークン数表示（input/output分離） | 🔴 High | `cc:TODO` |
-| TOK-02 | PostToolUse Hookでトークン累積 | 🔴 High | `cc:TODO` |
-| TOK-03 | UI: カードにトークン数表示 | 🔴 High | `cc:TODO` |
+| TOK-01 | リアルトークン数表示（input/output分離） | 🔴 High | ✅ `cc:完了` |
+| TOK-02 | SessionEnd Hookでトークン合計計算 | 🔴 High | ✅ `cc:完了` |
+| TOK-03 | UI: カードにトークン数表示 | 🔴 High | ✅ `cc:完了` |
 
 ### Wave 2: セッション分類・マーキング
 
 | ID | タスク | 優先度 | 状態 |
 |----|--------|--------|------|
-| CLS-01 | セッション重要度・分類機能 | 🔴 High | `cc:TODO` |
-| CLS-02 | 失敗セッション自動検出（エラーパターン分析） | 🔴 High | `cc:TODO` |
-| CLS-03 | 🐛バグアイコン・マーキングUI | 🔴 High | `cc:TODO` |
+| CLS-01 | セッション重要度・分類機能 | 🔴 High | ✅ `cc:完了` |
+| CLS-02 | 失敗セッション自動検出（エラーパターン分析） | 🔴 High | ✅ `cc:完了` |
+| CLS-03 | 🐛バグアイコン・マーキングUI | 🔴 High | ✅ `cc:完了` |
 
 ### Wave 3: 自動コンテキスト注入
 
@@ -77,12 +77,12 @@ Phase 0〜2 完了: 基盤構築、Plugin機能、Smart Export、Context Managem
 | INJ-02 | CLI getとUI同期（Edge作成 + WebSocket通知） | 🔴 High | `cc:TODO` |
 | INJ-03 | ノード削除時のコンテキスト管理（残りpending + /clear通知） | 🟡 Medium | `cc:TODO` |
 
-### Wave 4: ネガティブ学習
+### Wave 4: ネガティブ学習 ✅
 
 | ID | タスク | 優先度 | 状態 |
 |----|--------|--------|------|
-| NEG-01 | バグセッション自動接続（セマンティック検索 + 確認あり） | 🟡 Medium | `cc:TODO` |
-| NEG-02 | ネガティブコンテキストフォーマット | 🟡 Medium | `cc:TODO` |
+| NEG-01 | バグセッション自動接続（セマンティック検索 + 確認あり） | 🟡 Medium | ✅ `cc:完了` |
+| NEG-02 | ネガティブコンテキストフォーマット | 🟡 Medium | ✅ `cc:完了` |
 
 ---
 

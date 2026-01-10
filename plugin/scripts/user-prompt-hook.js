@@ -140,6 +140,109 @@ async function searchRelatedContext(query) {
 }
 
 /**
+ * Search for failed sessions (has_issues=true) related to the query
+ * @param {string} query - Search query (user's message)
+ * @returns {Promise<Array<{sessionId: string, sessionName: string, shortSummary: string, relevanceScore: number, issueType?: string}>|null>}
+ */
+async function searchFailedSessions(query) {
+  try {
+    const response = await sendToAPI("/api/search/issues", {
+      query,
+      limit: 3,
+      minRelevanceScore: 0.4,
+    });
+
+    if (!response.ok) {
+      // 503 means semantic search is not available (no VOYAGE_API_KEY)
+      if (response.status === 503) {
+        return null;
+      }
+      log(`[cnthub] Failed to search failed sessions: ${response.status}`);
+      return null;
+    }
+
+    const result = await response.json();
+    return result.results || [];
+  } catch (error) {
+    log(`[cnthub] Error searching failed sessions: ${getErrorMessage(error)}`);
+    return null;
+  }
+}
+
+/**
+ * Save failed session suggestions for later approval
+ * @param {string} claudeSessionId - Claude session ID
+ * @param {Array<{sessionId: string, sessionName: string, shortSummary: string, relevanceScore: number, issueType?: string}>} sessions - Suggested sessions
+ * @returns {Promise<boolean>} Success status
+ */
+async function saveSuggest(claudeSessionId, sessions) {
+  try {
+    const response = await sendToAPI("/api/inject/suggest", {
+      claudeSessionId,
+      suggestedSessions: sessions,
+    });
+
+    if (!response.ok) {
+      log(`[cnthub] Failed to save suggest: ${response.status}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    log(`[cnthub] Error saving suggest: ${getErrorMessage(error)}`);
+    return false;
+  }
+}
+
+/**
+ * Format CLI notification for failed session suggestions
+ * @param {Array<{sessionId: string, sessionName: string, shortSummary: string, relevanceScore: number, issueType?: string}>} sessions
+ * @returns {string}
+ */
+function formatSuggestNotification(sessions) {
+  const issueTypeLabels = {
+    error_loop: "同じエラーの繰り返し",
+    edit_loop: "同じファイルを何度も編集",
+    test_failure_loop: "テスト失敗ループ",
+    rollback: "変更のロールバック",
+    other: "その他の問題",
+  };
+
+  const lines = [
+    "---",
+    "# [cnthub] 関連する失敗セッションが見つかりました",
+    "",
+    "以下の過去の失敗事例が現在のタスクに関連している可能性があります:",
+    "",
+  ];
+
+  sessions.forEach((session, index) => {
+    const score = Math.round(session.relevanceScore * 100);
+    const issueLabel = session.issueType
+      ? issueTypeLabels[session.issueType] || session.issueType
+      : "不明";
+    lines.push(`${index + 1}. **${session.sessionName}** (関連度: ${score}%)`);
+    lines.push(`   - 問題タイプ: ${issueLabel}`);
+    if (session.shortSummary) {
+      const summary =
+        session.shortSummary.length > 80
+          ? session.shortSummary.substring(0, 80) + "..."
+          : session.shortSummary;
+      lines.push(`   - ${summary}`);
+    }
+    lines.push("");
+  });
+
+  lines.push(
+    "`/cnthub:approve` を実行すると、これらのセッションがコンテキストに追加されます。"
+  );
+  lines.push("`/cnthub:dismiss` で提案を無視します。");
+  lines.push("---");
+
+  return lines.join("\n");
+}
+
+/**
  * Get pending inject for session
  * @param {string} sessionId - Session ID
  * @returns {Promise<string|null>} Pending context or null
@@ -312,6 +415,23 @@ async function main() {
       if (relatedContext && relatedContext.contextText) {
         log(`[cnthub] Found ${relatedContext.sessionsUsed} related sessions`);
         additionalContextParts.push(relatedContext.contextText);
+      }
+
+      // 3. Search for failed sessions (negative learning)
+      const failedSessions = await searchFailedSessions(message);
+      if (failedSessions && failedSessions.length > 0) {
+        log(`[cnthub] Found ${failedSessions.length} related failed sessions`);
+
+        // Save suggestions for later approval
+        const saved = await saveSuggest(sessionId, failedSessions);
+        if (saved) {
+          // Add notification to context
+          const notification = formatSuggestNotification(failedSessions);
+          additionalContextParts.push(notification);
+          log(
+            "[cnthub] Failed session suggestions saved and notification added"
+          );
+        }
       }
     }
 
