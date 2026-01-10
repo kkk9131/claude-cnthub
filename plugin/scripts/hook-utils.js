@@ -482,17 +482,44 @@ function isProcessRunning(pid) {
  * @returns {Promise<boolean>} 起動成功の場合 true
  */
 async function startServer() {
-  // プラグインルートからプロジェクトルートを計算
+  // プラグインルートからバンドル済みAPIを起動
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.dirname(__dirname);
-  const projectRoot = path.resolve(pluginRoot, "..");
-  const apiDir = path.join(projectRoot, "packages", "api");
+  const workerApiPath = path.join(pluginRoot, "scripts", "worker-api.js");
 
-  log(`[cnthub] Starting API server from: ${apiDir}`);
+  // バンドル版が存在するか確認
+  if (!fs.existsSync(workerApiPath)) {
+    // フォールバック: 開発時は packages/api から起動
+    const projectRoot = path.resolve(pluginRoot, "..");
+    const apiDir = path.join(projectRoot, "packages", "api");
+
+    if (fs.existsSync(path.join(apiDir, "src", "index.ts"))) {
+      log(`[cnthub] Starting API server from source: ${apiDir}`);
+      try {
+        const child = spawn("bun", ["run", "src/index.ts"], {
+          cwd: apiDir,
+          detached: true,
+          stdio: "ignore",
+          env: { ...process.env, NODE_ENV: "production" },
+        });
+        child.unref();
+        if (child.pid) savePid(child.pid);
+        log(`[cnthub] API server process spawned (PID: ${child.pid})`);
+        return true;
+      } catch (error) {
+        logError(`[cnthub] Failed to start server: ${getErrorMessage(error)}`);
+        return false;
+      }
+    }
+
+    logError(`[cnthub] worker-api.js not found: ${workerApiPath}`);
+    return false;
+  }
+
+  log(`[cnthub] Starting API server from bundle: ${workerApiPath}`);
 
   try {
-    // bun run dev:api をバックグラウンドで起動
-    const child = spawn("bun", ["run", "src/index.ts"], {
-      cwd: apiDir,
+    // バンドル済みAPIをbunで起動
+    const child = spawn("bun", [workerApiPath], {
       detached: true,
       stdio: "ignore",
       env: {

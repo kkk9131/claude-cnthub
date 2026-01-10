@@ -45,6 +45,38 @@ describe("Search API", () => {
     });
   });
 
+  describe("GET /api/search", () => {
+    test("クエリパラメータで検索が実行できる", async () => {
+      const res = await app.request("/api/search?query=テスト検索");
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { results: unknown[] };
+      expect(data.results).toBeDefined();
+    });
+
+    test("q パラメータでも検索できる", async () => {
+      const res = await app.request("/api/search?q=テスト検索");
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { results: unknown[] };
+      expect(data.results).toBeDefined();
+    });
+
+    test("limit パラメータで件数を制限できる", async () => {
+      const res = await app.request("/api/search?query=テスト&limit=5");
+
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { results: unknown[] };
+      expect(data.results).toBeDefined();
+    });
+
+    test("クエリパラメータがない場合は 400 を返す", async () => {
+      const res = await app.request("/api/search");
+
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe("POST /api/search", () => {
     test("ローカルモデルで検索が実行できる", async () => {
       const res = await app.request("/api/search", {

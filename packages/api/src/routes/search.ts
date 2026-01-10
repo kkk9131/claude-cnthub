@@ -71,6 +71,80 @@ interface SearchStatusResponse {
 const app = new Hono();
 
 /**
+ * セマンティック検索の共通処理
+ */
+async function handleSearch(
+  queryText: string,
+  limit: number
+): Promise<
+  SearchResponse | { error: string; message: string; status: number }
+> {
+  // Embedding 機能が利用可能かチェック
+  if (!isEmbeddingAvailable()) {
+    return {
+      error: "Semantic search is not available",
+      message: "VOYAGE_API_KEY is not configured",
+      status: 503,
+    };
+  }
+
+  // クエリの Embedding を生成
+  const embeddingResult = await generateQueryEmbedding(queryText);
+  if (!embeddingResult) {
+    return {
+      error: "Failed to process query",
+      message: "Could not generate embedding for the query",
+      status: 500,
+    };
+  }
+
+  // セマンティック検索を実行
+  const searchResults = searchSimilarSessions(embeddingResult.embedding, limit);
+
+  // 距離をスコアに変換
+  const results = searchResults.map((result) => ({
+    sessionId: result.sessionId,
+    sessionName: result.sessionName,
+    shortSummary: result.shortSummary,
+    relevanceScore: distanceToRelevanceScore(result.distance),
+  }));
+
+  return {
+    results,
+    totalResults: results.length,
+    queryTokens: embeddingResult.totalTokens,
+  };
+}
+
+/**
+ * GET /api/search - セマンティック検索（クエリパラメータ）
+ *
+ * MCPサーバーや簡易アクセス用
+ */
+app.get("/", searchRateLimit, async (c) => {
+  const query = c.req.query("query") || c.req.query("q");
+  const limitParam = c.req.query("limit");
+
+  if (!query) {
+    return c.json({ error: "Query parameter 'query' or 'q' is required" }, 400);
+  }
+
+  const limit = limitParam
+    ? Math.min(Math.max(parseInt(limitParam, 10), 1), 50)
+    : 10;
+  const result = await handleSearch(query, limit);
+
+  if ("status" in result) {
+    return c.json(
+      { error: result.error, message: result.message },
+      result.status
+    );
+  }
+
+  return c.json(result);
+});
+
+/**
  * POST /api/search - セマンティック検索
  *
  * クエリテキストに関連するセッションを検索
@@ -81,51 +155,16 @@ app.post(
   zValidator("json", searchRequestSchema),
   async (c) => {
     const { query: queryText, limit } = c.req.valid("json");
+    const result = await handleSearch(queryText, limit);
 
-    // Embedding 機能が利用可能かチェック
-    if (!isEmbeddingAvailable()) {
+    if ("status" in result) {
       return c.json(
-        {
-          error: "Semantic search is not available",
-          message: "VOYAGE_API_KEY is not configured",
-        },
-        503
+        { error: result.error, message: result.message },
+        result.status
       );
     }
 
-    // クエリの Embedding を生成
-    const embeddingResult = await generateQueryEmbedding(queryText);
-    if (!embeddingResult) {
-      return c.json(
-        {
-          error: "Failed to process query",
-          message: "Could not generate embedding for the query",
-        },
-        500
-      );
-    }
-
-    // セマンティック検索を実行
-    const searchResults = searchSimilarSessions(
-      embeddingResult.embedding,
-      limit
-    );
-
-    // 距離をスコアに変換
-    const results = searchResults.map((result) => ({
-      sessionId: result.sessionId,
-      sessionName: result.sessionName,
-      shortSummary: result.shortSummary,
-      relevanceScore: distanceToRelevanceScore(result.distance),
-    }));
-
-    const response: SearchResponse = {
-      results,
-      totalResults: results.length,
-      queryTokens: embeddingResult.totalTokens,
-    };
-
-    return c.json(response);
+    return c.json(result);
   }
 );
 
