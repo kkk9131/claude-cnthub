@@ -30,6 +30,7 @@ import {
 } from "../services/context";
 import { findOrCreateProjectByWorkingDir } from "../services/project-linking";
 import { hookLogger as log } from "../utils/logger";
+import { emitTokensUpdated } from "../websocket";
 
 const hooksRouter = new Hono();
 
@@ -335,6 +336,14 @@ hooksRouter.post(
         outputTokens: data.usage.outputTokens,
       });
       tokensUpdated = true;
+
+      // WebSocketでリアルタイム通知
+      emitTokensUpdated(
+        session.sessionId,
+        data.usage.inputTokens,
+        data.usage.outputTokens
+      );
+
       log.info("Session tokens set", {
         sessionId: session.sessionId,
         inputTokens: data.usage.inputTokens,
@@ -414,6 +423,14 @@ hooksRouter.post(
         outputTokens: data.usage.outputTokens,
       });
       tokensUpdated = true;
+
+      // WebSocketでリアルタイム通知
+      emitTokensUpdated(
+        session.sessionId,
+        data.usage.inputTokens,
+        data.usage.outputTokens
+      );
+
       log.debug("Session tokens set", {
         sessionId: session.sessionId,
         inputTokens: data.usage.inputTokens,

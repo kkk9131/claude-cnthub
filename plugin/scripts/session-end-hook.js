@@ -9,6 +9,8 @@
  * - session_id: string
  * - transcript_path: string
  * - cwd: string
+ * - permission_mode: string
+ * - reason: "clear"|"logout"|"prompt_input_exit"|"other"
  * - hook_event_name: "SessionEnd"
  */
 
