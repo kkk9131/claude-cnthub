@@ -17,6 +17,7 @@ import type { Message, SessionSummary } from "@claude-cnthub/shared";
 import { parseTranscript, validateTranscriptPath } from "./transcript-parser";
 import { generateSummary, extractMetadata } from "./summarizer";
 import { generateEmbedding, type EmbeddingResult } from "./embeddings";
+import { classifyAndSaveSession } from "./session-classifier";
 import { createSummary } from "../repositories/summary";
 import { saveEmbedding } from "../repositories/embedding";
 import { getSessionById } from "../repositories/session";
@@ -54,6 +55,7 @@ export interface SessionEndResult {
     summaryGenerated: boolean;
     titleGenerated: boolean;
     embeddingGenerated: boolean;
+    classificationUpdated: boolean;
     dbSaved: boolean;
   };
   /** エラー情報（失敗した場合） */
@@ -77,6 +79,7 @@ export async function processSessionEnd(
       summaryGenerated: false,
       titleGenerated: false,
       embeddingGenerated: false,
+      classificationUpdated: false,
       dbSaved: false,
     },
     errors: [],
@@ -206,9 +209,23 @@ export async function processSessionEnd(
     }
   }
 
-  // Step 5: DB 保存
+  // Step 5: セッション分類と失敗検出
+  if (summary) {
+    const classResult = classifyAndSaveSession(
+      input.sessionId,
+      messages,
+      "Session end"
+    );
+    if (classResult) {
+      result.steps.classificationUpdated = true;
+    } else {
+      result.errors.push("Classification failed");
+    }
+  }
+
+  // Step 6: DB 保存
   try {
-    // 5.1: 要約をDBに保存
+    // 6.1: 要約をDBに保存
     if (summary) {
       const savedSummary = createSummary({
         sessionId: input.sessionId,
@@ -229,7 +246,7 @@ export async function processSessionEnd(
       });
     }
 
-    // 5.2: Embeddingをベクトルテーブルに保存
+    // 6.2: Embeddingをベクトルテーブルに保存
     if (embeddingResult && summary) {
       const embeddingId = saveEmbedding(
         "summary",
@@ -248,7 +265,7 @@ export async function processSessionEnd(
       }
     }
 
-    // 5.3: セッション名更新はスキップ
+    // 6.3: セッション名更新はスキップ
     // セッション名は UserPromptSubmit Hook で初回メッセージから生成されるため、
     // ここでの更新は行わない
 

@@ -7,6 +7,9 @@
 import type {
   Session,
   SessionStatus,
+  SessionImportance,
+  SessionCategory,
+  SessionIssueType,
   SessionIndex,
   SessionIndexListResponse,
   ExtendedSessionSummary,
@@ -62,7 +65,16 @@ interface ListSessionsOptions extends PaginationOptions {
  * DBレコードからSessionエンティティへ変換
  */
 function toSession(row: Record<string, unknown>): Session {
-  return rowToEntity<Session>(row, ["created_at", "updated_at", "deleted_at"]);
+  const entity = rowToEntity<Session>(row, [
+    "created_at",
+    "updated_at",
+    "deleted_at",
+  ]);
+  // has_issues は INTEGER として保存されているので boolean に変換
+  return {
+    ...entity,
+    hasIssues: (row.has_issues as number) === 1,
+  };
 }
 
 /**
@@ -526,6 +538,93 @@ function toExtendedSessionSummary(
 }
 
 /**
+ * 古いprocessingセッションをcompletedに更新（起動時クリーンアップ）
+ *
+ * 同じプロジェクトの現在のセッション以外で、一定時間以上更新がない
+ * processingセッションをcompletedに更新。
+ * 最近アクティブなセッションは除外される。
+ *
+ * @param projectId - 対象プロジェクトID（指定しない場合は全プロジェクト）
+ * @param excludeSessionId - 除外するセッションID（現在のセッション）
+ * @param staleThresholdMinutes - この分数以上更新がないセッションのみ対象（デフォルト30分）
+ * @returns 更新されたセッション数
+ */
+export function cleanupStaleProcessingSessions(
+  projectId?: string,
+  excludeSessionId?: string,
+  staleThresholdMinutes: number = 30
+): number {
+  try {
+    const conditions: string[] = [
+      "status = 'processing'",
+      "deleted_at IS NULL",
+      // 指定分数以上更新がないセッションのみ対象
+      "datetime(updated_at) < datetime('now', '-' || ? || ' minutes')",
+    ];
+    const params: (string | number)[] = [staleThresholdMinutes];
+
+    if (projectId) {
+      conditions.push("project_id = ?");
+      params.push(projectId);
+    }
+
+    if (excludeSessionId) {
+      conditions.push("session_id != ?");
+      params.push(excludeSessionId);
+    }
+
+    const whereClause = conditions.join(" AND ");
+    const timestamp = now();
+
+    const result = execute(
+      `UPDATE sessions SET status = 'completed', updated_at = ? WHERE ${whereClause}`,
+      timestamp,
+      ...params
+    );
+
+    return result.changes;
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to cleanup stale sessions: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
+ * タイムアウトしたprocessingセッションをcompletedに更新
+ *
+ * 指定時間以上経過したprocessingセッションを自動的にcompletedに更新
+ *
+ * @param timeoutHours - タイムアウト時間（時間単位、デフォルト1時間）
+ * @returns 更新されたセッション数
+ */
+export function cleanupTimedOutSessions(timeoutHours: number = 1): number {
+  try {
+    const timestamp = now();
+    // SQLiteの datetime 関数を使用して、指定時間前の時刻を計算
+    const result = execute(
+      `UPDATE sessions
+       SET status = 'completed', updated_at = ?
+       WHERE status = 'processing'
+         AND deleted_at IS NULL
+         AND datetime(updated_at) < datetime('now', '-' || ? || ' hours')`,
+      timestamp,
+      timeoutHours
+    );
+
+    return result.changes;
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to cleanup timed out sessions: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
  * セッションの要約詳細を取得（Level 1）
  *
  * ch_ss_xxxx 形式の cnthub session ID と、UUID 形式の Claude Code session ID の両方で取得可能。
@@ -551,6 +650,249 @@ export function getSessionSummary(
     throw new AppError(
       ErrorCode.DATABASE_ERROR,
       `Failed to get session summary: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
+ * セッションのupdated_atを現在時刻に更新（タッチ）
+ *
+ * ツール使用時などにセッションがアクティブであることを示すために呼び出す。
+ * タイムアウトクリーンアップの対象から除外するために使用。
+ *
+ * @param sessionId - セッションID（ch_ss_xxxx形式）
+ * @returns 更新成功したかどうか
+ */
+export function touchSession(sessionId: string): boolean {
+  try {
+    const timestamp = now();
+    const result = execute(
+      "UPDATE sessions SET updated_at = ? WHERE session_id = ? AND deleted_at IS NULL",
+      timestamp,
+      sessionId
+    );
+    return result.changes > 0;
+  } catch (error) {
+    // タッチ失敗は致命的ではないのでログのみ
+    console.warn(
+      `[Session] Failed to touch session ${sessionId}:`,
+      error instanceof Error ? error.message : "Unknown error"
+    );
+    return false;
+  }
+}
+
+/**
+ * トークン数更新データ
+ */
+interface UpdateTokensData {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/**
+ * セッションのトークン数を累積更新
+ *
+ * input_tokens と output_tokens を現在の値に加算する。
+ * ch_ss_xxxx 形式の cnthub session ID と、UUID 形式の Claude Code session ID の両方で更新可能。
+ *
+ * @param sessionId - セッションID
+ * @param data - トークン数（累積加算される）
+ * @returns 更新後のセッション、存在しない場合は null
+ */
+export function updateSessionTokens(
+  sessionId: string,
+  data: UpdateTokensData
+): Session | null {
+  try {
+    // まずセッションを取得して、実際の session_id を解決
+    const existingSession = getSessionById(sessionId);
+    if (!existingSession) {
+      return null;
+    }
+    const actualSessionId = existingSession.sessionId;
+
+    const timestamp = now();
+    execute(
+      `UPDATE sessions
+       SET input_tokens = COALESCE(input_tokens, 0) + ?,
+           output_tokens = COALESCE(output_tokens, 0) + ?,
+           updated_at = ?
+       WHERE session_id = ?`,
+      data.inputTokens,
+      data.outputTokens,
+      timestamp,
+      actualSessionId
+    );
+
+    return getSessionById(actualSessionId);
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to update session tokens: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
+ * セッションのトークン数を直接設定
+ *
+ * session-end で使用。累積ではなく直接値を設定。
+ */
+export function setSessionTokens(
+  sessionId: string,
+  data: UpdateTokensData
+): Session | null {
+  try {
+    // まずセッションを取得して、実際の session_id を解決
+    const existingSession = getSessionById(sessionId);
+    if (!existingSession) {
+      return null;
+    }
+    const actualSessionId = existingSession.sessionId;
+
+    const timestamp = now();
+    execute(
+      `UPDATE sessions
+       SET input_tokens = ?,
+           output_tokens = ?,
+           updated_at = ?
+       WHERE session_id = ?`,
+      data.inputTokens,
+      data.outputTokens,
+      timestamp,
+      actualSessionId
+    );
+
+    return getSessionById(actualSessionId);
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to set session tokens: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
+ * セッション分類更新データ
+ */
+export interface UpdateSessionClassificationData {
+  importance?: SessionImportance;
+  category?: SessionCategory;
+  hasIssues?: boolean;
+  issueType?: SessionIssueType;
+}
+
+/**
+ * セッションの分類情報を更新
+ *
+ * 重要度、カテゴリ、問題フラグを更新する。
+ * ch_ss_xxxx 形式の cnthub session ID と、UUID 形式の Claude Code session ID の両方で更新可能。
+ *
+ * @param sessionId - セッションID
+ * @param data - 分類データ
+ * @returns 更新後のセッション、存在しない場合は null
+ */
+export function updateSessionClassification(
+  sessionId: string,
+  data: UpdateSessionClassificationData
+): Session | null {
+  try {
+    // まずセッションを取得して、実際の session_id を解決
+    const existingSession = getSessionById(sessionId);
+    if (!existingSession) {
+      return null;
+    }
+    const actualSessionId = existingSession.sessionId;
+
+    const fields: string[] = [];
+    const params: (string | number | null)[] = [];
+
+    if (data.importance !== undefined) {
+      fields.push("importance = ?");
+      params.push(data.importance);
+    }
+
+    if (data.category !== undefined) {
+      fields.push("category = ?");
+      params.push(data.category);
+    }
+
+    if (data.hasIssues !== undefined) {
+      fields.push("has_issues = ?");
+      params.push(data.hasIssues ? 1 : 0);
+    }
+
+    if (data.issueType !== undefined) {
+      fields.push("issue_type = ?");
+      params.push(data.issueType);
+    }
+
+    if (fields.length === 0) {
+      return existingSession;
+    }
+
+    fields.push("updated_at = ?");
+    params.push(now());
+    params.push(actualSessionId);
+
+    execute(
+      `UPDATE sessions SET ${fields.join(", ")} WHERE session_id = ?`,
+      ...params
+    );
+
+    return getSessionById(actualSessionId);
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to update session classification: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
+ * 問題のあるセッションを取得
+ *
+ * has_issues = true のセッション一覧を取得する。
+ *
+ * @param options - ページネーションオプション
+ * @returns 問題のあるセッション一覧
+ */
+export function listSessionsWithIssues(
+  options: PaginationOptions = {}
+): PaginatedResult<Session> {
+  try {
+    const { page = 1, limit = 20 } = options;
+
+    const conditions: string[] = ["has_issues = 1", "deleted_at IS NULL"];
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+    // 総件数取得
+    const countResult = queryOne<{ count: number }>(
+      `SELECT COUNT(*) as count FROM sessions ${whereClause}`
+    );
+    const total = countResult?.count ?? 0;
+
+    // データ取得
+    const offset = (page - 1) * limit;
+    const rows = query<Record<string, unknown>>(
+      `SELECT * FROM sessions ${whereClause} ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+      limit,
+      offset
+    );
+
+    return {
+      items: rows.map(toSession),
+      pagination: calculatePagination(total, page, limit),
+    };
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to list sessions with issues: ${error instanceof Error ? error.message : "Unknown error"}`,
       500
     );
   }

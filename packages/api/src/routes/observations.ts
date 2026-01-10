@@ -29,6 +29,7 @@ import {
 import { createSummary } from "../repositories/summary";
 import { generateSummary } from "../services/summarizer";
 import { analyzeObservations } from "../services/observation-analyzer";
+import { classifyAndSaveSession } from "../services/session-classifier";
 import { hookLogger as log } from "../utils/logger";
 import type { Message } from "@claude-cnthub/shared";
 
@@ -287,6 +288,9 @@ async function generateSummaryInBackground(
       },
     });
 
+    // セッション分類を更新
+    classifyAndSaveSession(sessionId, messages, "Export");
+
     // 要約完了後にセッションを completed に更新
     updateSession(sessionId, { status: "completed" });
 
@@ -480,6 +484,9 @@ async function generateSmartExportSummaryInBackground(
         sourceSessionId,
       },
     });
+
+    // セッション分類を更新
+    classifyAndSaveSession(sessionId, messages, "Smart export");
 
     // 要約完了後にセッションを completed に更新
     updateSession(sessionId, { status: "completed" });

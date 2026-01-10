@@ -14,7 +14,12 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { Message, SessionSummary } from "@claude-cnthub/shared";
+import type {
+  Message,
+  SessionSummary,
+  SessionImportance,
+  SessionCategory,
+} from "@claude-cnthub/shared";
 import { generateId, now } from "../repositories/base";
 
 /**
@@ -326,4 +331,145 @@ function createFallbackSummary(
     createdAt: timestamp,
     updatedAt: timestamp,
   };
+}
+
+/**
+ * セッション分類結果
+ */
+export interface SessionClassification {
+  /** 重要度 */
+  importance: SessionImportance;
+  /** カテゴリ */
+  category: SessionCategory;
+}
+
+/**
+ * メッセージからセッションの重要度とカテゴリを判定
+ *
+ * ヒューリスティックベースの判定:
+ * - 重要度: ファイル変更数、キー決定事項数、トークン数で判定
+ * - カテゴリ: 使用ツール、キーワードパターンで判定
+ *
+ * @param messages - メッセージ配列
+ * @param metadata - 抽出済みメタデータ
+ * @returns 分類結果
+ */
+export function classifySession(
+  messages: Message[],
+  metadata: ExtractedMetadata
+): SessionClassification {
+  const importance = determineImportance(messages, metadata);
+  const category = determineCategory(messages, metadata);
+
+  return { importance, category };
+}
+
+/**
+ * 重要度を判定
+ *
+ * 判定基準:
+ * - high: 10ファイル以上変更 or 5つ以上の決定事項 or 10000トークン以上
+ * - low: ファイル変更なし and 決定事項なし and 1000トークン未満
+ * - medium: その他
+ */
+function determineImportance(
+  messages: Message[],
+  metadata: ExtractedMetadata
+): SessionImportance {
+  const fileCount = metadata.filesModified.length;
+  const decisionCount = metadata.keyDecisions.length;
+  const tokenCount = calculateTokenCount(
+    messages.map((m) => m.content).join("\n")
+  );
+
+  // 高重要度の条件
+  if (fileCount >= 10 || decisionCount >= 5 || tokenCount >= 10000) {
+    return "high";
+  }
+
+  // 低重要度の条件
+  if (fileCount === 0 && decisionCount === 0 && tokenCount < 1000) {
+    return "low";
+  }
+
+  return "medium";
+}
+
+/**
+ * カテゴリを判定
+ *
+ * 判定基準:
+ * - bugfix: エラー/バグ関連のキーワードが含まれる
+ * - feature: 新規ファイル作成 or 機能追加キーワード
+ * - refactor: リファクタリングキーワード
+ * - exploration: 調査/試行錯誤キーワード or ツール使用が少ない
+ * - other: その他
+ */
+function determineCategory(
+  messages: Message[],
+  metadata: ExtractedMetadata
+): SessionCategory {
+  const allContent = messages
+    .map((m) => m.content)
+    .join("\n")
+    .toLowerCase();
+
+  // バグ修正パターン
+  const bugfixPatterns = [
+    /fix(ed|ing)?\s+(bug|error|issue)/i,
+    /バグ(修正|フィックス)/i,
+    /エラー(修正|対応)/i,
+    /issue\s*#?\d+/i,
+    /hotfix/i,
+  ];
+  if (bugfixPatterns.some((p) => p.test(allContent))) {
+    return "bugfix";
+  }
+
+  // 新機能パターン
+  const featurePatterns = [
+    /add(ed|ing)?\s+new/i,
+    /implement(ed|ing)?/i,
+    /新機能/i,
+    /機能追加/i,
+    /feature/i,
+  ];
+  if (featurePatterns.some((p) => p.test(allContent))) {
+    return "feature";
+  }
+
+  // リファクタリングパターン
+  const refactorPatterns = [
+    /refactor(ed|ing)?/i,
+    /リファクタ(リング)?/i,
+    /整理/i,
+    /cleanup/i,
+    /restructure/i,
+  ];
+  if (refactorPatterns.some((p) => p.test(allContent))) {
+    return "refactor";
+  }
+
+  // 調査/試行錯誤パターン
+  const explorationPatterns = [
+    /調査/i,
+    /試行錯誤/i,
+    /investigate/i,
+    /explore/i,
+    /research/i,
+    /検討/i,
+  ];
+  if (
+    explorationPatterns.some((p) => p.test(allContent)) ||
+    metadata.toolsUsed.length <= 2
+  ) {
+    return "exploration";
+  }
+
+  // ファイル変更があれば feature
+  if (metadata.filesModified.length > 0) {
+    return "feature";
+  }
+
+  return "other";
 }

@@ -13,6 +13,44 @@ const DB_PATH = process.env.DATABASE_PATH || ":memory:";
 let db: Database | null = null;
 
 /**
+ * MacOS用カスタムSQLiteライブラリの設定
+ *
+ * MacOSの組み込みSQLiteは拡張機能をサポートしないため、
+ * Homebrewでインストールされたsqlite3を使用する。
+ * これにより sqlite-vec 拡張が動作可能になる。
+ */
+function setupCustomSQLiteForMacOS(): void {
+  if (process.platform !== "darwin") return;
+
+  const customSqlitePaths = [
+    "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib", // Apple Silicon
+    "/usr/local/opt/sqlite3/lib/libsqlite3.dylib", // Intel Mac
+    "/usr/local/opt/sqlite/lib/libsqlite3.dylib", // 別名
+  ];
+
+  for (const path of customSqlitePaths) {
+    try {
+      const file = Bun.file(path);
+      if (file.size > 0) {
+        Database.setCustomSQLite(path);
+        console.log(`[DB] Using custom SQLite: ${path}`);
+        return;
+      }
+    } catch {
+      // ファイルが存在しない場合は次を試す
+    }
+  }
+
+  console.warn(
+    "[DB] Custom SQLite not found. sqlite-vec may not work on MacOS.\n" +
+      "     Install with: brew install sqlite3"
+  );
+}
+
+// MacOS用の設定を初期化時に実行
+setupCustomSQLiteForMacOS();
+
+/**
  * データベース接続を取得
  */
 export function getDatabase(): Database {
@@ -95,6 +133,8 @@ import { migration as migration006 } from "./migrations/006_create_merges";
 import { migration as migration007 } from "./migrations/007_create_observations";
 import { migration as migration008 } from "./migrations/008_add_local_embeddings";
 import { migration as migration009 } from "./migrations/009_add_session_edges";
+import { migration as migration010 } from "./migrations/010_add_token_counts";
+import { migration as migration011 } from "./migrations/011_add_session_classification";
 
 // 全マイグレーションリスト
 const allMigrations = [
@@ -107,6 +147,8 @@ const allMigrations = [
   migration007,
   migration008,
   migration009,
+  migration010,
+  migration011,
 ];
 
 /**
