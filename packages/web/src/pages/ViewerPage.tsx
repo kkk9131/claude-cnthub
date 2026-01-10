@@ -16,7 +16,16 @@ import { SessionDetailModal } from "../components/SessionDetailModal";
 import { useTheme } from "../hooks/useTheme";
 import { useProjectStore } from "../stores/projectStore";
 import { useWebSocketStore } from "../stores/websocket";
-import { MoonIcon, SunIcon, SessionsIcon, CogIcon } from "../components/icons";
+import {
+  MoonIcon,
+  SunIcon,
+  SessionsIcon,
+  CogIcon,
+  QuestionMarkCircleIcon,
+  BugIcon,
+} from "../components/icons";
+import { HelpModal } from "../components/HelpModal";
+import { FeedbackModal } from "../components/FeedbackModal";
 
 // ビュータブの型
 type ViewTab = "sessions" | "system";
@@ -97,6 +106,8 @@ export function ViewerPage() {
   );
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   // エディタに表示するセッション（非表示を除外 + プロジェクトフィルタ）
   const visibleSessions = useMemo(
@@ -502,19 +513,35 @@ export function ViewerPage() {
             </button>
           </div>
         </div>
-        <button
-          onClick={toggleTheme}
-          className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] transition-colors"
-          aria-label={
-            theme === "dark" ? "ライトモードに切替" : "ダークモードに切替"
-          }
-        >
-          {theme === "dark" ? (
-            <SunIcon className="w-5 h-5 text-[var(--text-secondary)]" />
-          ) : (
-            <MoonIcon className="w-5 h-5 text-[var(--text-secondary)]" />
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsFeedbackOpen(true)}
+            className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] transition-colors"
+            aria-label="フィードバックを送信"
+          >
+            <BugIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+          </button>
+          <button
+            onClick={() => setIsHelpOpen(true)}
+            className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] transition-colors"
+            aria-label="操作ガイドを表示"
+          >
+            <QuestionMarkCircleIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+          </button>
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] transition-colors"
+            aria-label={
+              theme === "dark" ? "ライトモードに切替" : "ダークモードに切替"
+            }
+          >
+            {theme === "dark" ? (
+              <SunIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+            ) : (
+              <MoonIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+            )}
+          </button>
+        </div>
       </header>
 
       {/* メインコンテンツ */}
@@ -619,6 +646,15 @@ export function ViewerPage() {
         sessionId={detailSessionId}
         onDelete={handleDeleteFromDetail}
         onNameChange={handleNameChange}
+      />
+
+      {/* ヘルプモーダル */}
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
+      {/* フィードバックモーダル */}
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
       />
     </div>
   );
