@@ -57,3 +57,9 @@ coverage/
 
 # Generated files
 @agent.summary.md
+
+# Project management (local only)
+Plans.md
+TASKS.md
+ARCHIVE.md
+AGENTS.md
