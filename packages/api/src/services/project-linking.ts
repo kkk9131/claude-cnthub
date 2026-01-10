@@ -8,6 +8,7 @@
  * 2. cwd が既存プロジェクトの rootPath のサブディレクトリ → そのプロジェクトに紐付け
  *    - 複数マッチした場合は、最も長いパス（より具体的なプロジェクト）を優先
  * 3. マッチなし → 新規プロジェクト作成（autoCreate オプション）
+ *    - ただし、ホームディレクトリ直下やシステムディレクトリは自動作成しない
  */
 
 import type { Project } from "@claude-cnthub/shared";
@@ -98,6 +99,50 @@ function extractProjectName(workingDir: string): string {
 }
 
 /**
+ * プロジェクト自動作成をスキップすべきパスかどうかを判定
+ *
+ * 以下のパスはプロジェクトとして不適切なため自動作成しない:
+ * - ルートディレクトリ (/)
+ * - ホームディレクトリ直下 (/Users/*, /home/*)
+ * - 一時ディレクトリ (/tmp, /var/tmp, etc.)
+ * - システムディレクトリ (/usr, /etc, /var, etc.)
+ *
+ * @param path 判定するパス
+ * @returns スキップすべき場合は true
+ */
+function shouldSkipAutoCreate(path: string): boolean {
+  const normalized = normalizePath(path);
+  if (!normalized) return true;
+
+  // パスを分割
+  const parts = normalized.split("/").filter(Boolean);
+
+  // ルートディレクトリ
+  if (parts.length === 0) return true;
+
+  // 1階層目のみのパス（/Users, /home, /tmp など）
+  if (parts.length === 1) return true;
+
+  // ホームディレクトリ直下 (/Users/username, /home/username)
+  if (parts.length === 2 && (parts[0] === "Users" || parts[0] === "home")) {
+    return true;
+  }
+
+  // 一時ディレクトリ
+  if (parts[0] === "tmp" || (parts[0] === "var" && parts[1] === "tmp")) {
+    return true;
+  }
+
+  // システムディレクトリ
+  const systemDirs = ["usr", "etc", "bin", "sbin", "lib", "opt"];
+  if (systemDirs.includes(parts[0])) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * 作業ディレクトリからプロジェクトを取得または作成
  *
  * @param workingDir 作業ディレクトリ（cwd）
@@ -132,7 +177,12 @@ export function findOrCreateProjectByWorkingDir(
     return exactMatch;
   }
 
-  // 4. 新規プロジェクト作成
+  // 4. 自動作成をスキップすべきパスかチェック
+  if (shouldSkipAutoCreate(normalizedPath)) {
+    return null;
+  }
+
+  // 5. 新規プロジェクト作成
   try {
     const name = extractProjectName(workingDir);
     return createProject({
