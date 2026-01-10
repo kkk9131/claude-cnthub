@@ -1,5 +1,13 @@
-import { SearchIcon, MenuIcon, MoonIcon, SunIcon } from "./icons";
+import { useState } from "react";
+import {
+  SearchIcon,
+  MenuIcon,
+  MoonIcon,
+  SunIcon,
+  QuestionMarkCircleIcon,
+} from "./icons";
 import { useTheme } from "../hooks/useTheme";
+import { HelpModal } from "./HelpModal";
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -7,6 +15,7 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   return (
     <header className="h-14 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] flex items-center justify-between px-4">
@@ -37,6 +46,13 @@ export function Header({ onMenuClick }: HeaderProps) {
           />
         </div>
         <button
+          onClick={() => setIsHelpOpen(true)}
+          className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] transition-colors"
+          aria-label="操作ガイドを表示"
+        >
+          <QuestionMarkCircleIcon className="w-5 h-5 text-[var(--text-secondary)]" />
+        </button>
+        <button
           onClick={toggleTheme}
           className="p-2 rounded-lg hover:bg-[var(--bg-elevated)] transition-colors"
           aria-label={
@@ -50,6 +66,8 @@ export function Header({ onMenuClick }: HeaderProps) {
           )}
         </button>
       </div>
+
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
     </header>
   );
 }

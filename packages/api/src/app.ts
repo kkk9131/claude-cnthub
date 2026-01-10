@@ -22,9 +22,24 @@ import { projectsRouter } from "./routes/projects";
 import { injectRouter } from "./routes/inject";
 import { edgesRouter } from "./routes/edges";
 import { systemContextRouter } from "./routes/system-context";
+import { feedbackRouter } from "./routes/feedback";
 
 // Viewer UI の静的ファイルパスを解決
-const VIEWER_UI_PATH = resolve(join(__dirname, "../../../plugin/ui"));
+// バンドル版: plugin/scripts/worker-api.js → ../ui
+// ソース版: packages/api/src/app.ts → ../../../plugin/ui
+const VIEWER_UI_PATH = (() => {
+  // CLAUDE_PLUGIN_ROOT が設定されていればそれを使用
+  if (process.env.CLAUDE_PLUGIN_ROOT) {
+    return resolve(join(process.env.CLAUDE_PLUGIN_ROOT, "ui"));
+  }
+  // バンドル版のパス（../ui）を優先チェック
+  const bundledPath = resolve(join(__dirname, "../ui"));
+  if (existsSync(bundledPath)) {
+    return bundledPath;
+  }
+  // ソース版のパス
+  return resolve(join(__dirname, "../../../plugin/ui"));
+})();
 
 /**
  * アプリケーションを作成（テスト用にファクトリ関数として提供）
@@ -89,6 +104,9 @@ export function createApp(): Hono {
 
   // System Context API（Phase 2: System Context 可視化）
   newApp.route("/api/system-context", systemContextRouter);
+
+  // Feedback API（フィードバック受付）
+  newApp.route("/api/feedback", feedbackRouter);
 
   // Viewer UI 静的配信 (R-10)
   // /viewer/* で plugin/ui/ の静的ファイルを配信
