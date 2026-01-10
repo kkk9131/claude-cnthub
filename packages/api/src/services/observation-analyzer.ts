@@ -16,6 +16,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Observation } from "../repositories/observation";
+import type { SessionIssueType } from "@claude-cnthub/shared";
 
 /**
  * グルーピングカテゴリ
@@ -329,4 +330,249 @@ export async function analyzeObservations(
       totalEstimatedTokens,
     };
   }
+}
+
+/**
+ * 失敗検出結果
+ */
+export interface IssueDetectionResult {
+  /** 問題があるか */
+  hasIssues: boolean;
+  /** 問題タイプ */
+  issueType?: SessionIssueType;
+  /** 検出された問題の詳細 */
+  details?: string;
+}
+
+/**
+ * Observations から失敗パターンを検出
+ *
+ * 検出パターン:
+ * - error_loop: 同じエラーメッセージの繰り返し（3回以上）
+ * - edit_loop: 同じファイルを何度も編集（5回以上）
+ * - test_failure_loop: テスト失敗→修正→再失敗のループ
+ * - rollback: git reset/revert の検出
+ *
+ * @param observations - 分析対象の observations
+ * @returns 失敗検出結果
+ */
+export function detectIssues(
+  observations: Observation[]
+): IssueDetectionResult {
+  if (observations.length === 0) {
+    return { hasIssues: false };
+  }
+
+  // エラーループの検出
+  const errorLoopResult = detectErrorLoop(observations);
+  if (errorLoopResult.hasIssues) {
+    return errorLoopResult;
+  }
+
+  // 編集ループの検出
+  const editLoopResult = detectEditLoop(observations);
+  if (editLoopResult.hasIssues) {
+    return editLoopResult;
+  }
+
+  // テスト失敗ループの検出
+  const testFailureResult = detectTestFailureLoop(observations);
+  if (testFailureResult.hasIssues) {
+    return testFailureResult;
+  }
+
+  // ロールバックの検出
+  const rollbackResult = detectRollback(observations);
+  if (rollbackResult.hasIssues) {
+    return rollbackResult;
+  }
+
+  return { hasIssues: false };
+}
+
+/**
+ * エラーループを検出（同じエラーが3回以上）
+ */
+function detectErrorLoop(observations: Observation[]): IssueDetectionResult {
+  // エラータイプの observations を抽出
+  const errorObs = observations.filter((obs) => obs.type === "error");
+
+  if (errorObs.length < 3) {
+    return { hasIssues: false };
+  }
+
+  // エラーメッセージをカウント（先頭100文字で比較）
+  const errorCounts = new Map<string, number>();
+  for (const obs of errorObs) {
+    const key = obs.content.slice(0, 100).toLowerCase();
+    errorCounts.set(key, (errorCounts.get(key) || 0) + 1);
+  }
+
+  // 3回以上の繰り返しがあるか
+  for (const [errorKey, count] of errorCounts) {
+    if (count >= 3) {
+      return {
+        hasIssues: true,
+        issueType: "error_loop",
+        details: `同じエラーが${count}回繰り返されました: "${errorKey.slice(0, 50)}..."`,
+      };
+    }
+  }
+
+  return { hasIssues: false };
+}
+
+/**
+ * 編集ループを検出（同じファイルを5回以上編集）
+ */
+function detectEditLoop(observations: Observation[]): IssueDetectionResult {
+  // file_change または tool_use (Edit/Write) を抽出
+  const editObs = observations.filter((obs) => {
+    if (obs.type === "file_change") return true;
+    if (obs.type === "tool_use") {
+      const content = obs.content.toLowerCase();
+      return content.includes("edit") || content.includes("write");
+    }
+    return false;
+  });
+
+  if (editObs.length < 5) {
+    return { hasIssues: false };
+  }
+
+  // ファイルパスをカウント
+  const fileCounts = new Map<string, number>();
+  for (const obs of editObs) {
+    // metadata からファイルパスを抽出
+    const metadata = obs.metadata as Record<string, unknown> | undefined;
+    const filePath =
+      (metadata?.file_path as string) ||
+      (metadata?.path as string) ||
+      extractFilePathFromContent(obs.content);
+
+    if (filePath) {
+      fileCounts.set(filePath, (fileCounts.get(filePath) || 0) + 1);
+    }
+  }
+
+  // 5回以上の編集があるか
+  for (const [filePath, count] of fileCounts) {
+    if (count >= 5) {
+      return {
+        hasIssues: true,
+        issueType: "edit_loop",
+        details: `同じファイルが${count}回編集されました: "${filePath}"`,
+      };
+    }
+  }
+
+  return { hasIssues: false };
+}
+
+/**
+ * テスト失敗ループを検出
+ */
+function detectTestFailureLoop(
+  observations: Observation[]
+): IssueDetectionResult {
+  // テスト関連のキーワードを検出
+  const testKeywords = ["test", "jest", "vitest", "mocha", "fail", "error"];
+  const testFailures: number[] = [];
+
+  for (let i = 0; i < observations.length; i++) {
+    const obs = observations[i];
+    const content = obs.content.toLowerCase();
+
+    // テスト失敗パターン
+    if (
+      obs.type === "error" ||
+      (content.includes("fail") &&
+        testKeywords.some((k) => content.includes(k)))
+    ) {
+      testFailures.push(i);
+    }
+  }
+
+  // 3回以上のテスト失敗があり、間に編集が挟まっているか
+  if (testFailures.length >= 3) {
+    // テスト失敗の間に編集があるか確認
+    let hasEditBetween = false;
+    for (let i = 0; i < testFailures.length - 1; i++) {
+      const start = testFailures[i];
+      const end = testFailures[i + 1];
+
+      for (let j = start + 1; j < end; j++) {
+        const obs = observations[j];
+        if (obs.type === "file_change" || obs.type === "tool_use") {
+          hasEditBetween = true;
+          break;
+        }
+      }
+      if (hasEditBetween) break;
+    }
+
+    if (hasEditBetween) {
+      return {
+        hasIssues: true,
+        issueType: "test_failure_loop",
+        details: `テスト失敗→修正→再失敗のループが${testFailures.length}回検出されました`,
+      };
+    }
+  }
+
+  return { hasIssues: false };
+}
+
+/**
+ * ロールバックを検出
+ */
+function detectRollback(observations: Observation[]): IssueDetectionResult {
+  const rollbackKeywords = [
+    "git reset",
+    "git revert",
+    "git checkout --",
+    "undo",
+    "rollback",
+    "元に戻",
+    "取り消",
+  ];
+
+  for (const obs of observations) {
+    const content = obs.content.toLowerCase();
+
+    for (const keyword of rollbackKeywords) {
+      if (content.includes(keyword)) {
+        return {
+          hasIssues: true,
+          issueType: "rollback",
+          details: `ロールバック操作が検出されました: "${keyword}"`,
+        };
+      }
+    }
+  }
+
+  return { hasIssues: false };
+}
+
+/**
+ * コンテンツからファイルパスを抽出（ヒューリスティック）
+ */
+function extractFilePathFromContent(content: string): string | null {
+  // よくあるパスパターンをマッチ
+  const patterns = [
+    /"file_path":\s*"([^"]+)"/,
+    /"path":\s*"([^"]+)"/,
+    /file:\s*([^\s,]+)/i,
+    /editing\s+([^\s,]+)/i,
+    /writing\s+to\s+([^\s,]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = content.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
 }

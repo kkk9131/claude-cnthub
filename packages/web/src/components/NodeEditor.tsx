@@ -322,6 +322,7 @@ interface SessionNodeData {
   projectName?: string;
   isHovered?: boolean;
   onClick?: () => void;
+  theme?: "dark" | "light";
   /** 問題があるかどうか */
   hasIssues?: boolean;
   /** 問題タイプ */
@@ -363,8 +364,11 @@ interface ContextNodeData {
   [key: string]: unknown;
 }
 
-// トークン数をフォーマット（1000以上は k 表記）
+// トークン数をフォーマット（M/k 表記）
 function formatTokenCount(count: number): string {
+  if (count >= 1000000) {
+    return (count / 1000000).toFixed(1) + "M";
+  }
   if (count >= 1000) {
     return (count / 1000).toFixed(1) + "k";
   }
@@ -398,6 +402,18 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 // セッションノードコンポーネント
 function SessionNode({ data }: { data: SessionNodeData }) {
+  const isDark = data.theme !== "light";
+  const baseStyle = isDark
+    ? {
+        backgroundColor: "#1a1a19",
+        borderColor: "#3a3a39",
+        color: "#f5f5f1",
+      }
+    : {
+        backgroundColor: "#ffffff",
+        borderColor: "#e8e6dc",
+        color: "#141413",
+      };
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -419,6 +435,7 @@ function SessionNode({ data }: { data: SessionNodeData }) {
       onClick={data.onClick}
       onKeyDown={handleKeyDown}
       aria-label={`Session: ${data.label}${data.projectName ? ` - Project: ${data.projectName}` : ""}${data.hasIssues ? ` - ${issueLabel}` : ""}`}
+      style={baseStyle}
       className={
         "session-node group px-4 py-3 bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-lg shadow-md w-[180px] h-[70px] relative transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-400)] focus:ring-offset-2 focus:ring-offset-[var(--bg-base)] " +
         (data.hasIssues ? "border-red-500/50 bg-red-500/10 " : "") +
@@ -641,6 +658,7 @@ interface NodeEditorProps {
   sessions?: Session[];
   projects?: Project[];
   currentSessionsData?: CurrentSessionData[];
+  theme?: "dark" | "light";
   onGetSession?: (sessionId: string) => void;
   onExportSession?: (sessionId: string) => void;
   onDeleteRequest?: (target: DeleteTarget) => void;
@@ -662,6 +680,7 @@ export function NodeEditor({
   sessions = [],
   projects = [],
   currentSessionsData = [],
+  theme = "dark",
   onGetSession,
   onExportSession,
   onDeleteRequest,
@@ -902,7 +921,8 @@ export function NodeEditor({
               node.data.outputTokens !== session.outputTokens ||
               node.data.hasIssues !== session.hasIssues ||
               node.data.importance !== session.importance ||
-              node.data.category !== session.category
+              node.data.category !== session.category ||
+              node.data.theme !== theme
             ) {
               return {
                 ...node,
@@ -919,6 +939,7 @@ export function NodeEditor({
                   issueType: session.issueType,
                   importance: session.importance,
                   category: session.category,
+                  theme,
                 },
               };
             }
@@ -965,6 +986,7 @@ export function NodeEditor({
               issueType: session.issueType,
               importance: session.importance,
               category: session.category,
+              theme,
               onClick: () => onSessionDetail?.(session.sessionId),
             },
           };
@@ -996,7 +1018,7 @@ export function NodeEditor({
 
       return result;
     });
-  }, [sessions, projectMap, setNodes]);
+  }, [sessions, projectMap, setNodes, theme, onSessionDetail]);
 
   // hoveredSessionId が変わったらノードの isHovered を更新
   useEffect(() => {
@@ -1297,7 +1319,11 @@ export function NodeEditor({
   ]);
 
   return (
-    <div className="w-full h-full bg-[var(--bg-base)]">
+    <div
+      className={`w-full h-full bg-[var(--bg-base)] ${
+        theme === "dark" ? "react-flow-theme-dark" : ""
+      }`}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
