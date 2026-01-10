@@ -13,7 +13,8 @@
  * - session_id: string
  * - tool_name: string
  * - tool_input: object
- * - tool_output: string
+ * - tool_response: object (公式仕様)
+ * - tool_use_id: string
  * - hook_event_name: "PostToolUse"
  */
 
@@ -78,8 +79,15 @@ async function main() {
       process.exit(0);
     }
 
-    const { session_id, tool_name, tool_input, tool_output, transcript_path } =
-      context;
+    const {
+      session_id,
+      tool_name,
+      tool_input,
+      tool_response,
+      transcript_path,
+    } = context;
+    // 公式仕様では tool_response（後方互換のため tool_output もサポート）
+    const toolOutput = tool_response || context.tool_output;
 
     // transcript_path がない場合はキャッシュから取得
     const resolvedTranscriptPath =
@@ -92,9 +100,9 @@ async function main() {
 
     const title = generateTitle(tool_name, tool_input);
     const content = truncateOutput(
-      typeof tool_output === "string"
-        ? tool_output
-        : JSON.stringify(tool_output, null, 2)
+      typeof toolOutput === "string"
+        ? toolOutput
+        : JSON.stringify(toolOutput, null, 2)
     );
 
     // トランスクリプトからセッション全体のusage情報を取得

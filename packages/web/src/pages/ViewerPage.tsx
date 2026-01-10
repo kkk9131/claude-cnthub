@@ -15,6 +15,7 @@ import { DeleteConfirmModal } from "../components/DeleteConfirmModal";
 import { SessionDetailModal } from "../components/SessionDetailModal";
 import { useTheme } from "../hooks/useTheme";
 import { useProjectStore } from "../stores/projectStore";
+import { useWebSocketStore } from "../stores/websocket";
 import { MoonIcon, SunIcon, SessionsIcon, CogIcon } from "../components/icons";
 
 // ビュータブの型
@@ -202,6 +203,39 @@ export function ViewerPage() {
       clearInterval(interval);
     };
   }, []);
+
+  // WebSocket 接続とトークン更新のリアルタイム処理
+  const { connect, lastTokensUpdated } = useWebSocketStore();
+
+  useEffect(() => {
+    // WebSocket 接続を開始
+    connect();
+  }, [connect]);
+
+  useEffect(() => {
+    // トークン更新イベントを受け取ったら currentSessionsData を更新
+    if (lastTokensUpdated) {
+      setCurrentSessionsData((prev) =>
+        prev.map((data) => {
+          if (data.session?.sessionId === lastTokensUpdated.sessionId) {
+            return {
+              ...data,
+              inputTokens: lastTokensUpdated.inputTokens,
+              outputTokens: lastTokensUpdated.outputTokens,
+              session: data.session
+                ? {
+                    ...data.session,
+                    inputTokens: lastTokensUpdated.inputTokens,
+                    outputTokens: lastTokensUpdated.outputTokens,
+                  }
+                : null,
+            };
+          }
+          return data;
+        })
+      );
+    }
+  }, [lastTokensUpdated]);
 
   // サイドバーからセッション表示/非表示を切り替え
   const handleSessionToggle = useCallback((session: Session) => {

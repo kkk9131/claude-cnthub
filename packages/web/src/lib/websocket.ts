@@ -368,6 +368,9 @@ export class WebSocketClient {
         case "edge_deleted":
           this.onEdgeDeleted?.(message.edgeId, message.remainingContext);
           break;
+        case "tokens_updated":
+          this.onTokensUpdated?.(message.tokens);
+          break;
       }
     } catch (error) {
       console.error("[WebSocket] Failed to parse message:", error);

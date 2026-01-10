@@ -11,6 +11,7 @@ import {
   wsClient,
   type ConnectionState,
   type EdgeEvent,
+  type TokensUpdatedEvent,
 } from "../lib/websocket";
 
 // ==================== 型定義 ====================
@@ -36,6 +37,9 @@ interface WebSocketState {
 
   /** 最後に削除されたEdge情報 */
   lastEdgeDeleted: { edgeId: string; remainingContext?: string } | null;
+
+  /** 最後のトークン更新イベント */
+  lastTokensUpdated: TokensUpdatedEvent | null;
 }
 
 interface WebSocketActions {
@@ -79,6 +83,7 @@ const initialState: WebSocketState = {
   lastError: null,
   lastEdgeCreated: null,
   lastEdgeDeleted: null,
+  lastTokensUpdated: null,
 };
 
 // ==================== 定数 ====================
@@ -159,6 +164,10 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => {
 
   wsClient.onEdgeDeleted = (edgeId, remainingContext) => {
     set({ lastEdgeDeleted: { edgeId, remainingContext } });
+  };
+
+  wsClient.onTokensUpdated = (tokens) => {
+    set({ lastTokensUpdated: tokens });
   };
 
   return {

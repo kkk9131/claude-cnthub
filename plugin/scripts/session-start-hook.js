@@ -15,6 +15,7 @@
  * - transcript_path: string
  * - cwd: string
  * - permission_mode: string
+ * - source: "startup"|"resume"|"clear"|"compact"
  * - hook_event_name: "SessionStart"
  *
  * Output (stdout):
