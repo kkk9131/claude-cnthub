@@ -137,7 +137,7 @@ app.get("/", searchRateLimit, async (c) => {
   if ("status" in result) {
     return c.json(
       { error: result.error, message: result.message },
-      result.status
+      result.status as 400 | 500
     );
   }
 
@@ -160,7 +160,7 @@ app.post(
     if ("status" in result) {
       return c.json(
         { error: result.error, message: result.message },
-        result.status
+        result.status as 400 | 500
       );
     }
 
@@ -245,6 +245,81 @@ app.post(
         sessionName: s.sessionName,
         relevanceScore: s.relevanceScore,
       })),
+    });
+  }
+);
+
+/**
+ * 失敗セッション検索リクエストスキーマ
+ */
+const issuesSearchSchema = z.object({
+  /** 検索クエリ */
+  query: z.string().min(1).max(1000),
+  /** 取得件数（デフォルト: 3） */
+  limit: z.number().int().min(1).max(10).optional().default(3),
+  /** 最小関連度スコア（デフォルト: 0.4） */
+  minRelevanceScore: z.number().min(0).max(1).optional().default(0.4),
+});
+
+/**
+ * POST /api/search/issues - 失敗セッション検索
+ *
+ * has_issues=true のセッションのみを対象にセマンティック検索。
+ * ネガティブ学習のための類似失敗セッション検索に使用。
+ */
+app.post(
+  "/issues",
+  searchRateLimit,
+  zValidator("json", issuesSearchSchema),
+  async (c) => {
+    const { query: queryText, limit, minRelevanceScore } = c.req.valid("json");
+
+    // Embedding 機能が利用可能かチェック
+    if (!isEmbeddingAvailable()) {
+      return c.json(
+        {
+          error: "Semantic search is not available",
+          message: "VOYAGE_API_KEY is not configured",
+        },
+        503
+      );
+    }
+
+    // クエリの Embedding を生成
+    const embeddingResult = await generateQueryEmbedding(queryText);
+    if (!embeddingResult) {
+      return c.json(
+        {
+          error: "Failed to process query",
+          message: "Could not generate embedding for the query",
+        },
+        500
+      );
+    }
+
+    // 失敗セッションのみを検索
+    const searchResults = searchSimilarSessions(
+      embeddingResult.embedding,
+      limit * 2, // フィルタリング用に多めに取得
+      { hasIssuesOnly: true }
+    );
+
+    // 距離をスコアに変換してフィルタ
+    const results = searchResults
+      .map((result) => ({
+        sessionId: result.sessionId,
+        sessionName: result.sessionName,
+        shortSummary: result.shortSummary,
+        relevanceScore: distanceToRelevanceScore(result.distance),
+      }))
+      .filter((result) => result.relevanceScore >= minRelevanceScore)
+      .slice(0, limit);
+
+    return c.json({
+      results,
+      totalResults: results.length,
+      queryTokens: embeddingResult.totalTokens,
+      hasIssuesFilter: true,
     });
   }
 );

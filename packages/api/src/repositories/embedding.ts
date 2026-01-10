@@ -68,6 +68,14 @@ export interface SessionSearchResult {
 }
 
 /**
+ * セッション検索オプション
+ */
+export interface SearchSessionsOptions {
+  /** 失敗セッション（has_issues=true）のみを検索 */
+  hasIssuesOnly?: boolean;
+}
+
+/**
  * 次元数からテーブル名を取得
  */
 function getVecTableName(dimension: number): string {
@@ -315,11 +323,13 @@ export function searchSimilar(
  *
  * @param queryEmbedding - クエリベクトル
  * @param limit - 取得件数
+ * @param options - 検索オプション（hasIssuesOnly: 失敗セッションのみ）
  * @returns セッション検索結果
  */
 export function searchSimilarSessions(
   queryEmbedding: number[],
-  limit: number = 10
+  limit: number = 10,
+  options: SearchSessionsOptions = {}
 ): SessionSearchResult[] {
   if (!ensureVecLoaded()) {
     return []; // sqlite-vec が利用不可
@@ -328,6 +338,9 @@ export function searchSimilarSessions(
 
   const dimension = queryEmbedding.length;
   const tableName = getVecTableName(dimension);
+
+  // has_issues フィルタを追加
+  const hasIssuesFilter = options.hasIssuesOnly ? "AND s.has_issues = 1" : "";
 
   const sql = `
     SELECT
@@ -343,6 +356,7 @@ export function searchSimilarSessions(
       AND ei.source_type = 'summary'
       AND ei.dimension = ?
       AND s.deleted_at IS NULL
+      ${hasIssuesFilter}
       AND k = ?
     ORDER BY ve.distance
   `;

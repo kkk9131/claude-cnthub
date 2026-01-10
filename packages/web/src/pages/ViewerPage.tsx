@@ -99,11 +99,10 @@ export function ViewerPage() {
   } | null>(null);
   const deleteResolverRef = useRef<(() => void) | null>(null);
 
-  // マージ関連の状態
-  const [mergeStatus, setMergeStatus] = useState<MergeStatus>("idle");
-  const [mergedSummary, setMergedSummary] = useState<MergedSummary | null>(
-    null
-  );
+  // マージ関連の状態（contextノードごとに管理）
+  const [mergeStateByContext, setMergeStateByContext] = useState<
+    Record<string, { status: MergeStatus; summary: MergedSummary | null }>
+  >({});
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -416,14 +415,23 @@ export function ViewerPage() {
     await fetchSessions();
   }, [fetchSessions]);
 
-  // マージ処理（セッション接続時に呼び出し）
+  // マージ処理（セッション接続時に呼び出し、contextIdごとに管理）
   const handleMerge = useCallback(
-    async (sessionIds: string[]): Promise<MergedSummary | null> => {
+    async (
+      contextId: string,
+      sessionIds: string[]
+    ): Promise<MergedSummary | null> => {
       if (sessionIds.length < 2) return null;
 
-      console.log("[Viewer] Starting merge:", sessionIds);
-      setMergeStatus("merging");
-      setMergedSummary(null);
+      console.log(
+        "[Viewer] Starting merge for context:",
+        contextId,
+        sessionIds
+      );
+      setMergeStateByContext((prev) => ({
+        ...prev,
+        [contextId]: { status: "merging", summary: null },
+      }));
 
       try {
         const response = await fetch("/api/merges/with-summary", {
@@ -435,7 +443,10 @@ export function ViewerPage() {
         if (!response.ok) {
           const errorData = await response.json();
           console.error("[Viewer] Merge failed:", errorData);
-          setMergeStatus("error");
+          setMergeStateByContext((prev) => ({
+            ...prev,
+            [contextId]: { status: "error", summary: null },
+          }));
           return null;
         }
 
@@ -451,13 +462,22 @@ export function ViewerPage() {
           compressionRatio: data.summary?.compressionRatio || 0,
         };
 
-        setMergedSummary(summary);
-        setMergeStatus("completed");
-        console.log("[Viewer] Merge completed:", summary);
+        setMergeStateByContext((prev) => ({
+          ...prev,
+          [contextId]: { status: "completed", summary },
+        }));
+        console.log(
+          "[Viewer] Merge completed for context:",
+          contextId,
+          summary
+        );
         return summary;
       } catch (err) {
         console.error("[Viewer] Merge error:", err);
-        setMergeStatus("error");
+        setMergeStateByContext((prev) => ({
+          ...prev,
+          [contextId]: { status: "error", summary: null },
+        }));
         return null;
       }
     },
@@ -577,8 +597,7 @@ export function ViewerPage() {
                   pendingDelete={pendingEditorDelete}
                   onDeleteComplete={handleEditorDeleteComplete}
                   onMerge={handleMerge}
-                  mergeStatus={mergeStatus}
-                  mergedSummary={mergedSummary}
+                  mergeStateByContext={mergeStateByContext}
                   onSessionDetail={(sessionId) => setDetailSessionId(sessionId)}
                   hoveredSessionId={hoveredSessionId}
                 />

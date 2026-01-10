@@ -234,6 +234,31 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: "approve_suggest",
+    description:
+      "Approve suggested failed sessions and inject negative context. Use this when the user runs /cnthub:approve.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionIndices: {
+          type: "array",
+          items: { type: "number" },
+          description:
+            "Indices of sessions to approve (1-based). Empty or omit to approve all.",
+        },
+      },
+    },
+  },
+  {
+    name: "dismiss_suggest",
+    description:
+      "Dismiss suggested failed sessions. Use this when the user runs /cnthub:dismiss.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
 ];
 
 /**
@@ -336,6 +361,14 @@ async function handleToolCall(params, id) {
 
       case "get_connected_sessions":
         result = await getConnectedSessions(args);
+        break;
+
+      case "approve_suggest":
+        result = await approveSuggest(args);
+        break;
+
+      case "dismiss_suggest":
+        result = await dismissSuggest(args);
         break;
 
       default:
@@ -900,6 +933,140 @@ async function getConnectedSessions({ format = "summary" } = {}) {
     sourceSessionIds: data.sourceSessionIds,
     context: data.context,
     format,
+  };
+}
+
+/**
+ * 失敗セッションの提案を承認
+ * @param {Object} options - オプション
+ * @param {number[]} [options.sessionIndices] - 承認するセッションのインデックス（1-based）
+ * @returns {Promise<Object>} 承認結果
+ */
+async function approveSuggest({ sessionIndices = [] }) {
+  // 現在のセッション ID を解決
+  const currentSessionId = await resolveCurrentSession();
+  if (!currentSessionId) {
+    return {
+      success: false,
+      message:
+        "現在のセッションが見つかりません。アクティブなセッションがありません。",
+    };
+  }
+
+  // 提案を取得
+  const getSuggestResponse = await fetchWithTimeout(
+    `${API_URL}/api/inject/suggest/${currentSessionId}`
+  );
+
+  if (getSuggestResponse.status === 404) {
+    return {
+      success: false,
+      message:
+        "承認待ちの提案がありません。新しいセッションを開始してください。",
+    };
+  }
+
+  if (!getSuggestResponse.ok) {
+    console.error(
+      `[cnthub] Failed to get suggest: ${getSuggestResponse.status}`
+    );
+    throw new Error("Failed to get suggestions. Please check the API server.");
+  }
+
+  const suggestData = await getSuggestResponse.json();
+  const suggestedSessions = suggestData.suggestedSessions || [];
+
+  if (suggestedSessions.length === 0) {
+    return {
+      success: false,
+      message: "提案されたセッションがありません。",
+    };
+  }
+
+  // 承認するセッションのインデックスをフィルタ
+  let indicesToApprove =
+    sessionIndices && sessionIndices.length > 0
+      ? sessionIndices
+          .map((i) => i - 1) // 1-based to 0-based
+          .filter((i) => i >= 0 && i < suggestedSessions.length)
+      : suggestedSessions.map((_, i) => i); // 全て承認
+
+  if (indicesToApprove.length === 0) {
+    return {
+      success: false,
+      message: "有効なインデックスが指定されていません。",
+    };
+  }
+
+  // 承認 API を呼び出し
+  const approveResponse = await fetchWithTimeout(
+    `${API_URL}/api/inject/approve/${currentSessionId}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionIndices: indicesToApprove }),
+    }
+  );
+
+  if (!approveResponse.ok) {
+    console.error(`[cnthub] Failed to approve: ${approveResponse.status}`);
+    throw new Error(
+      "Failed to approve suggestions. Please check the API server."
+    );
+  }
+
+  const result = await approveResponse.json();
+
+  const approvedNames = indicesToApprove.map(
+    (i) => suggestedSessions[i]?.sessionName || `Session ${i + 1}`
+  );
+
+  return {
+    success: true,
+    message: `${approvedNames.length}件の失敗セッションを承認しました。ネガティブコンテキストが次のメッセージで注入されます。`,
+    approvedSessions: approvedNames,
+    edgesCreated: result.edgesCreated || approvedNames.length,
+  };
+}
+
+/**
+ * 失敗セッションの提案を却下
+ * @returns {Promise<Object>} 却下結果
+ */
+async function dismissSuggest() {
+  // 現在のセッション ID を解決
+  const currentSessionId = await resolveCurrentSession();
+  if (!currentSessionId) {
+    return {
+      success: false,
+      message:
+        "現在のセッションが見つかりません。アクティブなセッションがありません。",
+    };
+  }
+
+  // 提案を削除
+  const deleteResponse = await fetchWithTimeout(
+    `${API_URL}/api/inject/suggest/${currentSessionId}`,
+    { method: "DELETE" }
+  );
+
+  if (deleteResponse.status === 404) {
+    return {
+      success: false,
+      message: "却下する提案がありません。",
+    };
+  }
+
+  if (!deleteResponse.ok) {
+    console.error(`[cnthub] Failed to dismiss: ${deleteResponse.status}`);
+    throw new Error(
+      "Failed to dismiss suggestions. Please check the API server."
+    );
+  }
+
+  return {
+    success: true,
+    message: "失敗セッションの提案を却下しました。",
   };
 }
 
