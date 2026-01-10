@@ -9,15 +9,22 @@
  * - POST   /api/inject/pending              - 残り部分を一時保存
  * - GET    /api/inject/pending/:sessionId   - pending があるか確認
  * - DELETE /api/inject/pending/:sessionId   - 注入完了後に削除
+ *
+ * ネガティブ学習（失敗セッション提案）:
+ * - POST   /api/inject/suggest              - 失敗セッション提案を保存
+ * - GET    /api/inject/suggest/:sessionId   - 提案を取得
+ * - POST   /api/inject/approve/:sessionId   - 提案を承認（Edge作成）
+ * - DELETE /api/inject/suggest/:sessionId   - 提案を拒否
  */
 
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { createMiddleware } from "hono/factory";
-import { findSourceSessionIdsByTarget } from "../repositories/edge";
+import { findSourceSessionIdsByTarget, createEdge } from "../repositories/edge";
 import { getSummariesBySessionIds } from "../repositories/summary";
 import { getSessionById } from "../repositories/session";
+import { buildNegativeContext } from "../services/context";
 
 const injectRouter = new Hono();
 
@@ -41,6 +48,29 @@ interface PendingInject {
 const pendingInjectStore = new Map<string, PendingInject>();
 
 /**
+ * PendingSuggest エントリ（ネガティブ学習用）
+ */
+interface PendingSuggest {
+  claudeSessionId: string;
+  suggestedSessions: {
+    sessionId: string;
+    sessionName: string;
+    shortSummary: string;
+    relevanceScore: number;
+    issueType?: string;
+  }[];
+  createdAt: Date;
+  expiresAt: Date;
+}
+
+/**
+ * インメモリストレージ（ネガティブ学習提案）
+ * キー: claudeSessionId
+ * 値: PendingSuggest
+ */
+const pendingSuggestStore = new Map<string, PendingSuggest>();
+
+/**
  * デフォルトの有効期限（1時間）
  */
 const DEFAULT_TTL_MS = 60 * 60 * 1000;
@@ -53,6 +83,12 @@ function cleanupExpiredEntries(): void {
   for (const [sessionId, entry] of pendingInjectStore.entries()) {
     if (entry.expiresAt <= now) {
       pendingInjectStore.delete(sessionId);
+    }
+  }
+  // pendingSuggestStore もクリーンアップ
+  for (const [sessionId, entry] of pendingSuggestStore.entries()) {
+    if (entry.expiresAt <= now) {
+      pendingSuggestStore.delete(sessionId);
     }
   }
 }
@@ -127,6 +163,29 @@ const sessionIdSchema = z
 const CreatePendingInjectSchema = z.object({
   sessionId: sessionIdSchema,
   context: z.string().min(1).max(100000), // 最大100KB
+});
+
+// ==================== PendingSuggest スキーマ ====================
+
+const CreatePendingSuggestSchema = z.object({
+  claudeSessionId: sessionIdSchema,
+  suggestedSessions: z
+    .array(
+      z.object({
+        sessionId: z.string().min(1),
+        sessionName: z.string(),
+        shortSummary: z.string(),
+        relevanceScore: z.number().min(0).max(1),
+        issueType: z.string().optional(),
+      })
+    )
+    .min(1)
+    .max(10),
+});
+
+const ApproveSuggestSchema = z.object({
+  /** 承認するセッションのインデックス（1-based）。空の場合は全て承認 */
+  sessionIndices: z.array(z.number().int().min(1)).optional(),
 });
 
 // ==================== エンドポイント ====================
@@ -296,6 +355,181 @@ injectRouter.get("/connected/:claudeSessionId", async (c) => {
   });
 });
 
+// ==================== ネガティブ学習（失敗セッション提案） ====================
+
+/**
+ * POST /suggest - 失敗セッション提案を保存
+ *
+ * UserPromptSubmit Hook から呼び出される。
+ * 類似の失敗セッションが見つかった場合に提案を保存。
+ */
+injectRouter.post(
+  "/suggest",
+  zValidator("json", CreatePendingSuggestSchema, handleValidationError),
+  async (c) => {
+    const data = c.req.valid("json");
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + DEFAULT_TTL_MS);
+
+    const entry: PendingSuggest = {
+      claudeSessionId: data.claudeSessionId,
+      suggestedSessions: data.suggestedSessions,
+      createdAt: now,
+      expiresAt,
+    };
+
+    // 同じ claudeSessionId があれば上書き
+    pendingSuggestStore.set(data.claudeSessionId, entry);
+
+    return c.json(
+      {
+        claudeSessionId: entry.claudeSessionId,
+        suggestionsCount: entry.suggestedSessions.length,
+        createdAt: entry.createdAt.toISOString(),
+        expiresAt: entry.expiresAt.toISOString(),
+      },
+      201
+    );
+  }
+);
+
+/**
+ * GET /suggest/:claudeSessionId - 提案を取得
+ *
+ * CLI や UI から呼び出される。
+ */
+injectRouter.get("/suggest/:claudeSessionId", async (c) => {
+  const claudeSessionId = c.req.param("claudeSessionId");
+  const entry = pendingSuggestStore.get(claudeSessionId);
+
+  // 存在しない場合
+  if (!entry) {
+    return c.json({ error: "Pending suggest not found" }, 404);
+  }
+
+  // 期限切れの場合は削除して 404
+  const now = new Date();
+  if (entry.expiresAt <= now) {
+    pendingSuggestStore.delete(claudeSessionId);
+    return c.json({ error: "Pending suggest not found" }, 404);
+  }
+
+  return c.json({
+    claudeSessionId: entry.claudeSessionId,
+    suggestedSessions: entry.suggestedSessions,
+    createdAt: entry.createdAt.toISOString(),
+    expiresAt: entry.expiresAt.toISOString(),
+  });
+});
+
+/**
+ * POST /approve/:claudeSessionId - 提案を承認
+ *
+ * 承認されたセッションについて Edge を作成し、
+ * ネガティブコンテキストを pending_inject に追加。
+ */
+injectRouter.post(
+  "/approve/:claudeSessionId",
+  zValidator("json", ApproveSuggestSchema, handleValidationError),
+  async (c) => {
+    const claudeSessionId = c.req.param("claudeSessionId");
+    const { sessionIndices } = c.req.valid("json");
+
+    const entry = pendingSuggestStore.get(claudeSessionId);
+
+    // 存在しない場合
+    if (!entry) {
+      return c.json({ error: "Pending suggest not found" }, 404);
+    }
+
+    // 期限切れの場合は削除して 404
+    const now = new Date();
+    if (entry.expiresAt <= now) {
+      pendingSuggestStore.delete(claudeSessionId);
+      return c.json({ error: "Pending suggest not found" }, 404);
+    }
+
+    // 承認するセッションを決定
+    let sessionsToApprove = entry.suggestedSessions;
+    if (sessionIndices && sessionIndices.length > 0) {
+      // 1-based index から 0-based に変換してフィルタ
+      sessionsToApprove = sessionIndices
+        .filter((i) => i >= 1 && i <= entry.suggestedSessions.length)
+        .map((i) => entry.suggestedSessions[i - 1]);
+    }
+
+    if (sessionsToApprove.length === 0) {
+      return c.json({ error: "No valid sessions to approve" }, 400);
+    }
+
+    // Edge を作成
+    const createdEdges: string[] = [];
+    for (const session of sessionsToApprove) {
+      try {
+        createEdge({
+          sourceSessionId: session.sessionId,
+          targetClaudeSessionId: claudeSessionId,
+        });
+        createdEdges.push(session.sessionId);
+      } catch (error) {
+        // Edge 作成失敗は無視（既に存在する場合など）
+        console.warn(
+          `[inject] Failed to create edge: ${session.sessionId} -> ${claudeSessionId}`,
+          error
+        );
+      }
+    }
+
+    // ネガティブコンテキストを構築して pending_inject に追加
+    if (createdEdges.length > 0) {
+      try {
+        const negativeContext = await buildNegativeContext(createdEdges);
+        if (negativeContext.contextText) {
+          addPendingInject(claudeSessionId, negativeContext.contextText, true);
+        }
+      } catch (error) {
+        console.error("[inject] Failed to build negative context:", error);
+      }
+    }
+
+    // 提案を削除
+    pendingSuggestStore.delete(claudeSessionId);
+
+    return c.json({
+      claudeSessionId,
+      approvedSessions: createdEdges,
+      edgesCreated: createdEdges.length,
+    });
+  }
+);
+
+/**
+ * DELETE /suggest/:claudeSessionId - 提案を拒否
+ */
+injectRouter.delete("/suggest/:claudeSessionId", async (c) => {
+  const claudeSessionId = c.req.param("claudeSessionId");
+  const entry = pendingSuggestStore.get(claudeSessionId);
+
+  // 存在しない場合（期限切れも含む）
+  if (!entry) {
+    return c.json({ error: "Pending suggest not found" }, 404);
+  }
+
+  // 期限切れの場合も削除して 404
+  const now = new Date();
+  if (entry.expiresAt <= now) {
+    pendingSuggestStore.delete(claudeSessionId);
+    return c.json({ error: "Pending suggest not found" }, 404);
+  }
+
+  // 削除
+  pendingSuggestStore.delete(claudeSessionId);
+
+  // 204 No Content
+  return c.body(null, 204);
+});
+
 // ==================== 定期クリーンアップ（オプション） ====================
 
 /**
@@ -396,4 +630,9 @@ export function hasPendingInject(sessionId: string): boolean {
 
 // ==================== テスト用エクスポート ====================
 
-export { injectRouter, pendingInjectStore, cleanupExpiredEntries };
+export {
+  injectRouter,
+  pendingInjectStore,
+  pendingSuggestStore,
+  cleanupExpiredEntries,
+};

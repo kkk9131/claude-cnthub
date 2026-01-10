@@ -265,18 +265,29 @@ function saveEdges(edges: Edge[]): void {
   }
 }
 
-function loadConnectedSessions(): string[] {
+function loadConnectedSessions(): Record<string, string[]> {
   try {
     const data = localStorage.getItem(STORAGE_KEY_CONNECTED);
-    return data ? JSON.parse(data) : [];
+    if (!data) return {};
+
+    const parsed = JSON.parse(data);
+
+    // 後方互換性: 旧形式（string[]）の場合は空オブジェクトを返す
+    if (Array.isArray(parsed)) {
+      console.log("[NodeEditor] Migrating old connected sessions format");
+      localStorage.removeItem(STORAGE_KEY_CONNECTED);
+      return {};
+    }
+
+    return parsed as Record<string, string[]>;
   } catch {
-    return [];
+    return {};
   }
 }
 
-function saveConnectedSessions(ids: string[]): void {
+function saveConnectedSessions(connections: Record<string, string[]>): void {
   try {
-    localStorage.setItem(STORAGE_KEY_CONNECTED, JSON.stringify(ids));
+    localStorage.setItem(STORAGE_KEY_CONNECTED, JSON.stringify(connections));
   } catch {
     // ignore
   }
@@ -712,6 +723,12 @@ interface DeleteTarget {
   name: string;
 }
 
+/** contextノードごとのマージ状態 */
+interface ContextMergeState {
+  status: MergeStatus;
+  summary: MergedSummary | null;
+}
+
 interface NodeEditorProps {
   sessions?: Session[];
   projects?: Project[];
@@ -722,12 +739,13 @@ interface NodeEditorProps {
   onDeleteRequest?: (target: DeleteTarget) => void;
   pendingDelete?: { type: "node" | "edge"; id: string } | null;
   onDeleteComplete?: () => void;
-  /** セッション接続時のマージ処理 */
-  onMerge?: (sessionIds: string[]) => Promise<MergedSummary | null>;
-  /** 現在のマージ状態 */
-  mergeStatus?: MergeStatus;
-  /** マージ済みの要約 */
-  mergedSummary?: MergedSummary | null;
+  /** セッション接続時のマージ処理（contextIdごと） */
+  onMerge?: (
+    contextId: string,
+    sessionIds: string[]
+  ) => Promise<MergedSummary | null>;
+  /** contextノードごとのマージ状態 */
+  mergeStateByContext?: Record<string, ContextMergeState>;
   /** セッション詳細表示 */
   onSessionDetail?: (sessionId: string) => void;
   /** サイドバーでホバー中のセッションID */
@@ -745,8 +763,7 @@ export function NodeEditor({
   pendingDelete,
   onDeleteComplete,
   onMerge,
-  mergeStatus = "idle",
-  mergedSummary,
+  mergeStateByContext = {},
   onSessionDetail,
   hoveredSessionId,
 }: NodeEditorProps) {
@@ -755,9 +772,10 @@ export function NodeEditor({
   const storedEdges = useRef(loadEdges());
   const storedConnected = useRef(loadConnectedSessions());
 
-  const [connectedSessionIds, setConnectedSessionIds] = useState<string[]>(
-    storedConnected.current
-  );
+  // contextノードごとの接続セッション管理
+  const [connectionsByContext, setConnectionsByContext] = useState<
+    Record<string, string[]>
+  >(storedConnected.current);
 
   // Backend edge ID mapping (reactFlowEdgeId -> backendEdgeId)
   const [edgeMapping, setEdgeMapping] = useState<EdgeMapping>({});
@@ -852,6 +870,14 @@ export function NodeEditor({
             );
 
         if (!existingContextIds.has(nodeId)) {
+          // このcontextに接続されたセッション数を取得
+          const connectedIds = connectionsByContext[nodeId] || [];
+          // このcontextのマージ状態を取得
+          const contextMergeState = mergeStateByContext[nodeId] || {
+            status: "idle" as MergeStatus,
+            summary: null,
+          };
+
           const newNode: Node = {
             id: nodeId,
             type: "context",
@@ -864,14 +890,14 @@ export function NodeEditor({
               tokenCount: data.tokenCount,
               inputTokens: session.inputTokens ?? data.inputTokens,
               outputTokens: session.outputTokens ?? data.outputTokens,
-              connectedCount: connectedSessionIds.length,
+              connectedCount: connectedIds.length,
               observationCount: data.observationCount,
               projectName: session.projectId
                 ? projectMap.get(session.projectId)
                 : undefined,
               onExport: createExportHandler(session.sessionId),
-              mergeStatus,
-              mergedSummary,
+              mergeStatus: contextMergeState.status,
+              mergedSummary: contextMergeState.summary,
             },
           };
           newContextNodes.push(newNode);
@@ -903,6 +929,14 @@ export function NodeEditor({
               (d) => d.session?.sessionId === sessionId
             );
             if (data?.session) {
+              // このcontextに接続されたセッション数を取得
+              const connectedIds = connectionsByContext[node.id] || [];
+              // このcontextのマージ状態を取得
+              const contextMergeState = mergeStateByContext[node.id] || {
+                status: "idle" as MergeStatus,
+                summary: null,
+              };
+
               return {
                 ...node,
                 data: {
@@ -913,14 +947,14 @@ export function NodeEditor({
                   tokenCount: data.tokenCount,
                   inputTokens: data.session.inputTokens ?? data.inputTokens,
                   outputTokens: data.session.outputTokens ?? data.outputTokens,
-                  connectedCount: connectedSessionIds.length,
+                  connectedCount: connectedIds.length,
                   observationCount: data.observationCount,
                   projectName: data.session.projectId
                     ? projectMap.get(data.session.projectId)
                     : undefined,
                   onExport: createExportHandler(data.session.sessionId),
-                  mergeStatus,
-                  mergedSummary,
+                  mergeStatus: contextMergeState.status,
+                  mergedSummary: contextMergeState.summary,
                 },
               };
             }
@@ -945,11 +979,10 @@ export function NodeEditor({
     });
   }, [
     currentSessionsData,
-    connectedSessionIds,
+    connectionsByContext,
     createExportHandler,
     setNodes,
-    mergeStatus,
-    mergedSummary,
+    mergeStateByContext,
     projectMap,
   ]);
 
@@ -1146,10 +1179,14 @@ export function NodeEditor({
 
         setEdgeMapping((prev) => ({ ...prev, ...newMapping }));
 
-        setConnectedSessionIds((prev) => {
-          const combined = [...new Set([...prev, ...newConnectedIds])];
-          saveConnectedSessions(combined);
-          return combined;
+        // このcontextノードの接続リストを更新
+        const contextId = `context-${claudeSessionId}`;
+        setConnectionsByContext((prev) => {
+          const current = prev[contextId] || [];
+          const combined = [...new Set([...current, ...newConnectedIds])];
+          const updated = { ...prev, [contextId]: combined };
+          saveConnectedSessions(updated);
+          return updated;
         });
       }
     };
@@ -1190,18 +1227,21 @@ export function NodeEditor({
       [reactFlowEdgeId]: edgeId,
     }));
 
-    // Connected sessions を更新
-    setConnectedSessionIds((prev) => {
-      if (prev.includes(sourceSessionId)) return prev;
-      const combined = [...prev, sourceSessionId];
-      saveConnectedSessions(combined);
-      return combined;
+    // このcontextの接続リストを更新
+    const contextId = `context-${targetClaudeSessionId}`;
+    setConnectionsByContext((prev) => {
+      const current = prev[contextId] || [];
+      if (current.includes(sourceSessionId)) return prev;
+      const combined = [...current, sourceSessionId];
+      const updated = { ...prev, [contextId]: combined };
+      saveConnectedSessions(updated);
+      return updated;
     });
 
-    // ノードのconnectedCountを更新
+    // このcontextノードのconnectedCountのみ更新
     setNodes((nds) =>
       nds.map((node) => {
-        if (node.id === `context-${targetClaudeSessionId}`) {
+        if (node.id === contextId) {
           const currentCount =
             typeof node.data.connectedCount === "number"
               ? node.data.connectedCount
@@ -1258,8 +1298,11 @@ export function NodeEditor({
       ) {
         const sessionId = params.source.replace("session-", "");
         const claudeSessionId = params.target.replace("context-", "");
+        const targetContextId = params.target; // "context-{sessionId}"
 
-        if (connectedSessionIds.includes(sessionId)) return;
+        // このcontextに対して既に接続済みかチェック
+        const currentConnections = connectionsByContext[targetContextId] || [];
+        if (currentConnections.includes(sessionId)) return;
 
         // Save edge to API
         const apiEdge = await createEdgeApi(sessionId, claudeSessionId);
@@ -1284,13 +1327,19 @@ export function NodeEditor({
           return newEdges;
         });
 
-        const newConnectedIds = [...connectedSessionIds, sessionId];
-        setConnectedSessionIds(newConnectedIds);
-        saveConnectedSessions(newConnectedIds);
+        // このcontextの接続リストのみ更新
+        const newConnectedIds = [...currentConnections, sessionId];
+        const newConnectionsByContext = {
+          ...connectionsByContext,
+          [targetContextId]: newConnectedIds,
+        };
+        setConnectionsByContext(newConnectionsByContext);
+        saveConnectedSessions(newConnectionsByContext);
 
+        // 特定のcontextノードのみconnectedCountを更新
         setNodes((nds) =>
           nds.map((node) => {
-            if (node.id.startsWith("context-")) {
+            if (node.id === targetContextId) {
               return {
                 ...node,
                 data: {
@@ -1307,11 +1356,11 @@ export function NodeEditor({
 
         // 2つ以上のセッションが接続されたらマージをトリガー
         if (newConnectedIds.length >= 2 && onMerge) {
-          onMerge(newConnectedIds);
+          onMerge(targetContextId, newConnectedIds);
         }
       }
     },
-    [connectedSessionIds, setEdges, setNodes, onGetSession, onMerge]
+    [connectionsByContext, setEdges, setNodes, onGetSession, onMerge]
   );
 
   // エッジ削除リクエスト（確認後に実際に削除）
@@ -1343,9 +1392,21 @@ export function NodeEditor({
   // 実際のエッジ削除処理
   const onEdgeDelete = useCallback(
     async (deletedEdges: Edge[]) => {
-      const deletedSessionIds = deletedEdges
-        .filter((edge) => edge.source.startsWith("session-"))
-        .map((edge) => edge.source.replace("session-", ""));
+      // ターゲットごとに削除するセッションをグループ化
+      const deletesByContext: Record<string, string[]> = {};
+      for (const edge of deletedEdges) {
+        if (
+          edge.source.startsWith("session-") &&
+          edge.target.startsWith("context-")
+        ) {
+          const sessionId = edge.source.replace("session-", "");
+          const contextId = edge.target;
+          if (!deletesByContext[contextId]) {
+            deletesByContext[contextId] = [];
+          }
+          deletesByContext[contextId].push(sessionId);
+        }
+      }
 
       // Delete edges from API
       for (const edge of deletedEdges) {
@@ -1360,25 +1421,36 @@ export function NodeEditor({
         }
       }
 
-      const newConnectedIds = connectedSessionIds.filter(
-        (id) => !deletedSessionIds.includes(id)
-      );
-      setConnectedSessionIds(newConnectedIds);
-      saveConnectedSessions(newConnectedIds);
+      // 各contextごとに接続リストを更新
+      const newConnectionsByContext = { ...connectionsByContext };
+      for (const [contextId, sessionIds] of Object.entries(deletesByContext)) {
+        const current = newConnectionsByContext[contextId] || [];
+        newConnectionsByContext[contextId] = current.filter(
+          (id) => !sessionIds.includes(id)
+        );
+        // 空になったcontextは削除
+        if (newConnectionsByContext[contextId].length === 0) {
+          delete newConnectionsByContext[contextId];
+        }
+      }
+      setConnectionsByContext(newConnectionsByContext);
+      saveConnectedSessions(newConnectionsByContext);
 
       setEdges((currentEdges) => {
         saveEdges(currentEdges);
         return currentEdges;
       });
 
+      // 影響を受けたcontextノードのみconnectedCountを更新
       setNodes((nds) =>
         nds.map((node) => {
-          if (node.id.startsWith("context-")) {
+          if (node.id.startsWith("context-") && deletesByContext[node.id]) {
+            const newCount = newConnectionsByContext[node.id]?.length || 0;
             return {
               ...node,
               data: {
                 ...node.data,
-                connectedCount: newConnectedIds.length,
+                connectedCount: newCount,
               },
             };
           }
@@ -1386,7 +1458,7 @@ export function NodeEditor({
         })
       );
     },
-    [connectedSessionIds, setNodes, setEdges, edgeMapping]
+    [connectionsByContext, setNodes, setEdges, edgeMapping]
   );
 
   // ノードドラッグ終了時に衝突検出と保存

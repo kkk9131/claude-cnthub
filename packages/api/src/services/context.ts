@@ -15,8 +15,12 @@ import {
   searchSimilarSessions,
   type SessionSearchResult,
 } from "../repositories/embedding";
-import { getSummariesBySessionIds } from "../repositories/summary";
-import type { SessionSummary } from "@claude-cnthub/shared";
+import {
+  getSummariesBySessionIds,
+  getSummaryBySessionId,
+} from "../repositories/summary";
+import { getSessionById } from "../repositories/session";
+import type { SessionSummary, SessionIssueType } from "@claude-cnthub/shared";
 import { distanceToRelevanceScore } from "../utils/relevance";
 
 /**
@@ -38,6 +42,15 @@ const SEARCH_MULTIPLIER = 2;
 const JAPANESE_CHARS_PER_TOKEN = 1.5;
 /** 英語1トークンあたりの文字数 */
 const ENGLISH_CHARS_PER_TOKEN = 4;
+
+/** 問題タイプのラベル */
+const issueTypeLabels: Record<SessionIssueType, string> = {
+  error_loop: "同じエラーの繰り返し",
+  edit_loop: "同じファイルを何度も編集",
+  test_failure_loop: "テスト失敗→修正→再失敗のループ",
+  rollback: "変更のロールバック",
+  other: "その他の問題",
+};
 
 /**
  * コンテキスト構築オプション
@@ -261,4 +274,147 @@ function estimateTokens(text: string): number {
  */
 export function isContextInjectionAvailable(): boolean {
   return isEmbeddingAvailable();
+}
+
+/**
+ * ネガティブコンテキストを構築
+ *
+ * 失敗セッションの情報を「失敗事例」として明示したフォーマットで構築。
+ * 同じ失敗を繰り返さないようにLLMに警告する。
+ *
+ * @param sessionIds - 失敗セッションIDのリスト
+ * @param options - 構築オプション
+ * @returns 構築されたネガティブコンテキスト
+ */
+export async function buildNegativeContext(
+  sessionIds: string[],
+  options: ContextOptions = {}
+): Promise<RelatedContext> {
+  const { maxTokens = DEFAULT_MAX_TOKENS } = options;
+
+  if (sessionIds.length === 0) {
+    return {
+      sessions: [],
+      contextText: "",
+      estimatedTokens: 0,
+      query: "",
+    };
+  }
+
+  const contextParts: string[] = [];
+  let estimatedTokens = 0;
+
+  // 警告ヘッダー
+  const header = `# ⚠️ 過去の失敗事例（参照用）
+
+以下は同様のタスクで発生した失敗事例です。
+**これらの方法は失敗しました。** 同じ失敗を避けるために参照してください。
+
+`;
+  contextParts.push(header);
+  estimatedTokens += estimateTokens(header);
+
+  // 各セッションの情報を追加
+  const sessions: RelatedSession[] = [];
+  for (const sessionId of sessionIds) {
+    const session = getSessionById(sessionId);
+    if (!session) continue;
+
+    const summary = getSummaryBySessionId(sessionId);
+    const sessionContext = formatNegativeSessionContext(session, summary);
+    const sessionTokens = estimateTokens(sessionContext);
+
+    // トークン制限をチェック
+    if (estimatedTokens + sessionTokens > maxTokens) {
+      break;
+    }
+
+    contextParts.push(sessionContext);
+    estimatedTokens += sessionTokens;
+
+    sessions.push({
+      sessionId: session.sessionId,
+      sessionName: session.name,
+      shortSummary: summary?.shortSummary || "",
+      detailedSummary: summary?.detailedSummary,
+      keyDecisions: summary?.keyDecisions,
+      filesModified: summary?.filesModified,
+      relevanceScore: 1.0, // 明示的に選択されたので最大スコア
+    });
+  }
+
+  // フッター
+  const footer = `
+---
+
+この情報は参考として提供されています。
+上記の失敗を繰り返さないよう、異なるアプローチを検討してください。
+`;
+  contextParts.push(footer);
+  estimatedTokens += estimateTokens(footer);
+
+  return {
+    sessions,
+    contextText: contextParts.join("\n"),
+    estimatedTokens,
+    query: "",
+  };
+}
+
+/**
+ * 失敗セッション情報を警告フォーマットでフォーマット
+ */
+function formatNegativeSessionContext(
+  session: {
+    sessionId: string;
+    name: string;
+    issueType?: SessionIssueType | null;
+    updatedAt: Date;
+    task?: string | null;
+  },
+  summary: SessionSummary | null
+): string {
+  const parts: string[] = [];
+
+  // セッション名と日付
+  parts.push(`## ⚠️ ${session.name}`);
+  const dateStr = session.updatedAt.toISOString().split("T")[0];
+  parts.push(`- **日付**: ${dateStr}`);
+
+  // 失敗タイプ
+  if (session.issueType) {
+    const label = issueTypeLabels[session.issueType] || session.issueType;
+    parts.push(`- **失敗タイプ**: ${label}`);
+  }
+
+  // 失敗内容
+  parts.push("");
+  parts.push("### 何が失敗したか");
+  parts.push(summary?.shortSummary || session.task || "(詳細なし)");
+
+  // 変更ファイル（問題が起きたファイルの特定に有用）
+  if (summary?.filesModified && summary.filesModified.length > 0) {
+    parts.push("");
+    parts.push("### 問題が起きたファイル");
+    for (const file of summary.filesModified.slice(0, MAX_FILES_DISPLAY)) {
+      parts.push(`- \`${file}\``);
+    }
+  }
+
+  // 教訓・注意点
+  if (summary?.keyDecisions && summary.keyDecisions.length > 0) {
+    parts.push("");
+    parts.push("### 教訓・避けるべきこと");
+    for (const decision of summary.keyDecisions.slice(
+      0,
+      MAX_DECISIONS_DISPLAY
+    )) {
+      parts.push(`- ⚠️ ${decision}`);
+    }
+  }
+
+  parts.push("");
+  parts.push("---");
+
+  return parts.join("\n");
 }
