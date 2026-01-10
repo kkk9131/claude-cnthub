@@ -10,11 +10,14 @@
  *
  * Input (stdin JSON):
  * - session_id: string
- * - message: string (user's message)
+ * - transcript_path: string
+ * - cwd: string
+ * - permission_mode: string
+ * - prompt: string (user's message, 公式仕様)
  * - hook_event_name: "UserPromptSubmit"
  *
  * Output (stdout):
- * - additionalContext: string (context to inject into Claude)
+ * - Plain text or JSON with additionalContext field
  *
  * Note: stderr is used for logging only
  */
@@ -268,7 +271,9 @@ async function main() {
       process.exit(0);
     }
 
-    const { session_id: sessionId, message } = context;
+    const { session_id: sessionId, prompt } = context;
+    // 公式仕様では "prompt" フィールド（後方互換のため message もサポート）
+    const message = prompt || context.message;
 
     // Skip if message is empty
     if (!message || typeof message !== "string" || !message.trim()) {
@@ -310,22 +315,16 @@ async function main() {
       }
     }
 
-    // 3. Check for UI-connected sessions (always)
-    const connectedContext = await getConnectedSessionsContext(sessionId);
-    if (connectedContext) {
-      log("[cnthub] Adding connected sessions context");
-      additionalContextParts.push(connectedContext);
-    }
-
-    // 4. Check for pending inject (always, not just first message)
+    // 3. Check for pending inject (includes UI-connected sessions context)
+    // Note: Edge creation now adds context to pending_inject, so we only need to check pending
     const pendingContext = await getPendingInject(sessionId);
     if (pendingContext) {
       log("[cnthub] Found pending inject, adding to context");
       additionalContextParts.push(pendingContext);
 
-      // Delete pending inject after successful retrieval
+      // Delete pending inject after successful retrieval (prevents duplicate injection)
       await deletePendingInject(sessionId);
-      log("[cnthub] Pending inject deleted");
+      log("[cnthub] Pending inject consumed and deleted");
     }
 
     // Output additional context if any

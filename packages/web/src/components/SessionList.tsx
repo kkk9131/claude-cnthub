@@ -170,7 +170,7 @@ const SessionCard = memo(function SessionCard({ session }: SessionCardProps) {
 
   return (
     <button
-      className={`card hover:bg-[var(--bg-elevated)] transition-colors w-full text-left group ${
+      className={`card session-card hover:bg-[var(--bg-surface)] transition-colors w-full text-left group ${
         session.status === "processing"
           ? "border-2 border-[var(--color-primary-400)]"
           : ""
@@ -213,19 +213,19 @@ function SessionListSkeleton() {
   return (
     <div className="space-y-4" aria-busy="true" aria-label="Loading sessions">
       <div className="flex items-center justify-between">
-        <div className="h-7 w-24 bg-[var(--bg-elevated)] rounded animate-pulse" />
-        <div className="h-5 w-16 bg-[var(--bg-elevated)] rounded animate-pulse" />
+        <div className="h-7 w-24 bg-[var(--border-subtle)] rounded animate-pulse" />
+        <div className="h-5 w-16 bg-[var(--border-subtle)] rounded animate-pulse" />
       </div>
       <div className="grid gap-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="card">
+          <div key={i} className="card session-card">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-2 h-2 bg-[var(--border-default)] rounded-full" />
-                  <div className="h-5 w-48 bg-[var(--bg-elevated)] rounded animate-pulse" />
+                  <div className="h-5 w-48 bg-[var(--border-subtle)] rounded animate-pulse" />
                 </div>
-                <div className="h-4 w-32 bg-[var(--bg-elevated)] rounded animate-pulse" />
+                <div className="h-4 w-32 bg-[var(--border-subtle)] rounded animate-pulse" />
               </div>
             </div>
           </div>

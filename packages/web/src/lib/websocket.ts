@@ -19,6 +19,25 @@ type ClientMessage =
   | { type: "typing"; sessionId: string; isTyping: boolean };
 
 /**
+ * Edge イベント型
+ */
+export interface EdgeEvent {
+  edgeId: string;
+  sourceSessionId: string;
+  targetClaudeSessionId: string;
+  createdAt: string;
+}
+
+/**
+ * トークン更新イベント型
+ */
+export interface TokensUpdatedEvent {
+  sessionId: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/**
  * サーバー → クライアント メッセージ型
  */
 type ServerMessage =
@@ -26,7 +45,10 @@ type ServerMessage =
   | { type: "left"; sessionId: string }
   | { type: "new-message"; message: Message }
   | { type: "typing"; sessionId: string; isTyping: boolean }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "edge_created"; edge: EdgeEvent }
+  | { type: "edge_deleted"; edgeId: string; remainingContext?: string }
+  | { type: "tokens_updated"; tokens: TokensUpdatedEvent };
 
 /**
  * 接続状態
@@ -65,6 +87,12 @@ function isServerMessage(data: unknown): data is ServerMessage {
       );
     case "error":
       return typeof msg.message === "string";
+    case "edge_created":
+      return typeof msg.edge === "object" && msg.edge !== null;
+    case "edge_deleted":
+      return typeof msg.edgeId === "string";
+    case "tokens_updated":
+      return typeof msg.tokens === "object" && msg.tokens !== null;
     default:
       return false;
   }
@@ -126,6 +154,16 @@ export class WebSocketClient {
 
   /** 接続状態変更時 */
   onConnectionChange: ((state: ConnectionState) => void) | null = null;
+
+  /** Edge作成時 */
+  onEdgeCreated: ((edge: EdgeEvent) => void) | null = null;
+
+  /** Edge削除時 */
+  onEdgeDeleted: ((edgeId: string, remainingContext?: string) => void) | null =
+    null;
+
+  /** トークン更新時 */
+  onTokensUpdated: ((tokens: TokensUpdatedEvent) => void) | null = null;
 
   // ==================== コンストラクタ ====================
 
@@ -323,6 +361,12 @@ export class WebSocketClient {
           break;
         case "error":
           this.onError?.(message.message);
+          break;
+        case "edge_created":
+          this.onEdgeCreated?.(message.edge);
+          break;
+        case "edge_deleted":
+          this.onEdgeDeleted?.(message.edgeId, message.remainingContext);
           break;
       }
     } catch (error) {

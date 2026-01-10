@@ -25,6 +25,7 @@ export function useTheme() {
   useEffect(() => {
     // DOMにテーマクラスを適用
     const root = document.documentElement;
+    root.dataset.theme = theme;
     if (theme === "light") {
       root.classList.add("light");
       root.classList.remove("dark");
