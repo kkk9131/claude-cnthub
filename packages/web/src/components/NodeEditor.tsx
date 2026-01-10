@@ -411,6 +411,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 // セッションノードコンポーネント
 function SessionNode({ data }: { data: SessionNodeData }) {
   const isDark = data.theme !== "light";
+  const labelClass = isDark ? "text-white" : "text-[var(--text-primary)]";
   const baseStyle = isDark
     ? {
         backgroundColor: "#1a1a19",
@@ -481,7 +482,7 @@ function SessionNode({ data }: { data: SessionNodeData }) {
           {formatTokenCount(data.outputTokens || 0)}
         </div>
       )}
-      <div className="text-sm font-semibold text-white truncate">
+      <div className={`text-sm font-semibold truncate ${labelClass}`}>
         {data.label}
       </div>
       <div className="flex items-center gap-2 mt-1">

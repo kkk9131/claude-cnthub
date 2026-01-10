@@ -39,6 +39,17 @@
     --text-primary: #f5f5f1;
     --text-secondary: #a9a9a4;
     --text-muted: #707070;
+
+    /* React Flow default node colors (avoid white nodes) */
+    --xy-node-background-color-default: var(--bg-surface);
+    --xy-node-border-default: 1px solid var(--border-subtle);
+    --xy-node-color-default: var(--text-primary);
+    --xy-controls-button-color: var(--text-primary);
+    --xy-controls-button-color-hover: var(--text-primary);
+    --xy-controls-button-background-color: var(--bg-surface);
+    --xy-controls-button-background-color-hover: var(--bg-elevated);
+    --xy-controls-button-border-color: var(--border-default);
+    --xy-controls-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
   }
 
   /* ライトモード（オプション - class ベース） */
@@ -51,6 +62,17 @@
     --text-primary: #141413;
     --text-secondary: #5c5650;
     --text-muted: #b0aea5;
+
+    /* React Flow default node colors (light theme) */
+    --xy-node-background-color-default: var(--bg-surface);
+    --xy-node-border-default: 1px solid var(--border-subtle);
+    --xy-node-color-default: var(--text-primary);
+    --xy-controls-button-color: var(--text-primary);
+    --xy-controls-button-color-hover: var(--text-primary);
+    --xy-controls-button-background-color: var(--bg-surface);
+    --xy-controls-button-background-color-hover: var(--bg-elevated);
+    --xy-controls-button-border-color: var(--border-default);
+    --xy-controls-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
 
   html {
@@ -100,6 +122,70 @@
     border-radius: 0.75rem;
     padding: 1rem;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .session-card {
+    background-color: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    color: var(--text-primary);
+  }
+
+  .session-node {
+    background-color: var(--bg-surface) !important;
+    border-color: var(--border-subtle) !important;
+    color: var(--text-primary) !important;
+  }
+
+  :root[data-theme="dark"] .session-node {
+    background-color: #1a1a19 !important;
+    border-color: #3a3a39 !important;
+    color: #f5f5f1 !important;
+  }
+
+  :root[data-theme="light"] .session-node {
+    background-color: #ffffff !important;
+    border-color: #e8e6dc !important;
+    color: #141413 !important;
+  }
+
+  /* React Flow ノードのラッパーが白くなる問題の保険 */
+  .react-flow__node-session {
+    background-color: transparent !important;
+  }
+
+  .react-flow__node-session .session-node {
+    background-color: var(--bg-surface) !important;
+    border-color: var(--border-subtle) !important;
+    color: var(--text-primary) !important;
+  }
+
+  /* Viewer専用: テーマが誤ってlightになっていても強制的にdark変数を適用 */
+  .viewer-theme {
+    --bg-base: #0f0f0e;
+    --bg-surface: #1a1a19;
+    --bg-elevated: #242423;
+    --border-subtle: #3a3a39;
+    --border-default: #4a4a49;
+    --text-primary: #f5f5f1;
+    --text-secondary: #a9a9a4;
+    --text-muted: #707070;
+    --xy-node-background-color-default: var(--bg-surface);
+    --xy-node-border-default: 1px solid var(--border-subtle);
+    --xy-node-color-default: var(--text-primary);
+  }
+
+  /* React Flow 内だけダーク変数を固定 */
+  .react-flow-theme-dark {
+    --bg-surface: #1a1a19;
+    --bg-elevated: #242423;
+    --border-subtle: #3a3a39;
+    --border-default: #4a4a49;
+    --text-primary: #f5f5f1;
+    --text-secondary: #a9a9a4;
+    --text-muted: #707070;
+    --xy-node-background-color-default: var(--bg-surface);
+    --xy-node-border-default: 1px solid var(--border-subtle);
+    --xy-node-color-default: var(--text-primary);
   }
 
   .input {
