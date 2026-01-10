@@ -36,6 +36,7 @@ const CONFIG_DIR = path.join(HOME_DIR, ".claude-cnthub");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 const PID_FILE = path.join(CONFIG_DIR, "server.pid");
 const WEB_PID_FILE = path.join(CONFIG_DIR, "web.pid");
+const TRANSCRIPT_CACHE_FILE = path.join(CONFIG_DIR, "transcript-cache.json");
 
 // デフォルト設定
 const DEFAULT_CONFIG = {
@@ -266,6 +267,145 @@ function isValidTranscriptPath(filePath) {
  */
 function getErrorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * トランスクリプトファイルから最新のusage情報を取得
+ * @param {string} transcriptPath - トランスクリプトファイルのパス
+ * @returns {{inputTokens: number, outputTokens: number} | null} usage情報またはnull
+ */
+function getLatestUsageFromTranscript(transcriptPath) {
+  if (!transcriptPath || !isValidTranscriptPath(transcriptPath)) {
+    return null;
+  }
+
+  try {
+    if (!fs.existsSync(transcriptPath)) {
+      return null;
+    }
+
+    const content = fs.readFileSync(transcriptPath, "utf-8");
+    const lines = content.trim().split("\n");
+
+    // 末尾から探索して最新のusage情報を取得
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      try {
+        const entry = JSON.parse(line);
+        if (entry.message && entry.message.usage) {
+          const usage = entry.message.usage;
+          // cache_read_input_tokens は課金されないので除外
+          return {
+            inputTokens:
+              (usage.input_tokens || 0) +
+              (usage.cache_creation_input_tokens || 0),
+            outputTokens: usage.output_tokens || 0,
+          };
+        }
+      } catch {
+        // JSON解析エラーは無視して次の行を試す
+        continue;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    log(`[cnthub] Failed to read transcript: ${getErrorMessage(error)}`);
+    return null;
+  }
+}
+
+/**
+ * トランスクリプトファイルから全エントリのトークン合計を計算
+ * @param {string} transcriptPath - トランスクリプトファイルのパス
+ * @returns {{inputTokens: number, outputTokens: number} | null} トークン合計またはnull
+ */
+function getTotalUsageFromTranscript(transcriptPath) {
+  if (!transcriptPath || !isValidTranscriptPath(transcriptPath)) {
+    return null;
+  }
+
+  try {
+    if (!fs.existsSync(transcriptPath)) {
+      return null;
+    }
+
+    const content = fs.readFileSync(transcriptPath, "utf-8");
+    const lines = content.trim().split("\n");
+
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      try {
+        const entry = JSON.parse(trimmed);
+        if (entry.message && entry.message.usage) {
+          const usage = entry.message.usage;
+          // cache_read_input_tokens は課金されないので除外
+          totalInputTokens +=
+            (usage.input_tokens || 0) +
+            (usage.cache_creation_input_tokens || 0);
+          totalOutputTokens += usage.output_tokens || 0;
+        }
+      } catch {
+        // JSON解析エラーは無視して次の行を試す
+        continue;
+      }
+    }
+
+    if (totalInputTokens === 0 && totalOutputTokens === 0) {
+      return null;
+    }
+
+    return {
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+    };
+  } catch (error) {
+    log(`[cnthub] Failed to read transcript: ${getErrorMessage(error)}`);
+    return null;
+  }
+}
+
+/**
+ * セッションごとのトランスクリプトパスをキャッシュに保存
+ * @param {string} sessionId - セッションID
+ * @param {string} transcriptPath - トランスクリプトパス
+ */
+function saveTranscriptPath(sessionId, transcriptPath) {
+  ensureConfigDir();
+  try {
+    let cache = {};
+    if (fs.existsSync(TRANSCRIPT_CACHE_FILE)) {
+      cache = JSON.parse(fs.readFileSync(TRANSCRIPT_CACHE_FILE, "utf-8"));
+    }
+    cache[sessionId] = transcriptPath;
+    fs.writeFileSync(TRANSCRIPT_CACHE_FILE, JSON.stringify(cache, null, 2));
+  } catch (error) {
+    log(`[cnthub] Failed to save transcript path: ${getErrorMessage(error)}`);
+  }
+}
+
+/**
+ * セッションのトランスクリプトパスをキャッシュから取得
+ * @param {string} sessionId - セッションID
+ * @returns {string|null} トランスクリプトパスまたはnull
+ */
+function getTranscriptPath(sessionId) {
+  try {
+    if (!fs.existsSync(TRANSCRIPT_CACHE_FILE)) {
+      return null;
+    }
+    const cache = JSON.parse(fs.readFileSync(TRANSCRIPT_CACHE_FILE, "utf-8"));
+    return cache[sessionId] || null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -754,6 +894,10 @@ module.exports = {
   fetchWithTimeout,
   sendToAPI,
   isValidTranscriptPath,
+  getLatestUsageFromTranscript,
+  getTotalUsageFromTranscript,
+  saveTranscriptPath,
+  getTranscriptPath,
   getErrorMessage,
   loadConfig,
   saveConfig,

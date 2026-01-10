@@ -420,7 +420,9 @@ export function ViewerPage() {
   );
 
   return (
-    <div className="h-screen flex flex-col bg-[var(--bg-base)]">
+    <div
+      className={`${theme === "dark" ? "viewer-theme " : ""}h-screen flex flex-col bg-[var(--bg-base)]`}
+    >
       {/* ヘッダー */}
       <header className="h-12 flex items-center justify-between px-4 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)]">
         <div className="flex items-center gap-4">
@@ -507,6 +509,7 @@ export function ViewerPage() {
                   sessions={visibleSessions}
                   projects={projects}
                   currentSessionsData={currentSessionsData}
+                  theme={theme}
                   onGetSession={handleGetSession}
                   onExportSession={handleExportSession}
                   onDeleteRequest={handleEditorDeleteRequest}

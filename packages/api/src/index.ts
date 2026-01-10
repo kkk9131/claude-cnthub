@@ -10,6 +10,7 @@ import { app } from "./app";
 import { config } from "./config";
 import { runMigrations } from "./db";
 import { websocketHandler, type WSClientData } from "./websocket";
+import { cleanupTimedOutSessions } from "./repositories/session";
 
 // ==================== サーバー起動 ====================
 
@@ -22,6 +23,35 @@ try {
   console.error("Server cannot start without valid database");
   process.exit(1);
 }
+
+// ==================== バックグラウンド処理 ====================
+
+// タイムアウトセッションのクリーンアップ（2時間以上経過したprocessingセッション）
+// ツール使用時にセッションがtouchされるため、アクティブなセッションは除外される
+const SESSION_TIMEOUT_HOURS = 2;
+const CLEANUP_INTERVAL_MS = 15 * 60 * 1000; // 15分ごとにチェック
+
+// サーバー起動時に一度実行
+try {
+  const cleanedUp = cleanupTimedOutSessions(SESSION_TIMEOUT_HOURS);
+  if (cleanedUp > 0) {
+    console.log(`[Cleanup] Cleaned up ${cleanedUp} timed out sessions`);
+  }
+} catch (error) {
+  console.warn("[Cleanup] Initial cleanup failed:", error);
+}
+
+// 定期的にクリーンアップを実行
+setInterval(() => {
+  try {
+    const cleanedUp = cleanupTimedOutSessions(SESSION_TIMEOUT_HOURS);
+    if (cleanedUp > 0) {
+      console.log(`[Cleanup] Cleaned up ${cleanedUp} timed out sessions`);
+    }
+  } catch (error) {
+    console.warn("[Cleanup] Periodic cleanup failed:", error);
+  }
+}, CLEANUP_INTERVAL_MS);
 
 console.log(`
 ╔═══════════════════════════════════════════╗

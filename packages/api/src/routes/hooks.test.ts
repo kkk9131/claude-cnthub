@@ -368,6 +368,153 @@ describe("Hook API", () => {
 
       expect(res.status).toBe(400);
     });
+
+    it("usage情報が含まれている場合トークン数を更新する", async () => {
+      // セッションを作成
+      const claudeSessionId = `test-session-tokens-${Date.now()}`;
+      const createRes = await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        workingDirectory: "/tmp/test",
+      });
+      const createJson = await createRes.json();
+      const sessionId = createJson.id;
+
+      // トークン情報付きでpost-tooluseを呼び出し
+      const res = await request("POST", "/hook/post-tooluse", {
+        sessionId: claudeSessionId,
+        toolName: "Read",
+        title: "Read: /path/to/file.ts",
+        content: "file contents",
+        usage: {
+          inputTokens: 1000,
+          outputTokens: 500,
+        },
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.status).toBe("recorded");
+      expect(json.tokensUpdated).toBe(true);
+
+      // セッションのトークン数が更新されていることを確認
+      const sessionRes = await request("GET", `/api/sessions/${sessionId}`);
+      const sessionJson = await sessionRes.json();
+      expect(sessionJson.inputTokens).toBe(1000);
+      expect(sessionJson.outputTokens).toBe(500);
+    });
+
+    it("post-tooluseでトークン数の合計値が設定される", async () => {
+      // セッションを作成
+      const claudeSessionId = `test-session-tokens-cumulative-${Date.now()}`;
+      const createRes = await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        workingDirectory: "/tmp/test",
+      });
+      const createJson = await createRes.json();
+      const sessionId = createJson.id;
+
+      // 1回目のpost-tooluse（トランスクリプト全体の合計: 100, 50）
+      await request("POST", "/hook/post-tooluse", {
+        sessionId: claudeSessionId,
+        toolName: "Read",
+        title: "Read: file1.ts",
+        usage: { inputTokens: 100, outputTokens: 50 },
+      });
+
+      // 2回目のpost-tooluse（トランスクリプト全体の合計: 300, 150）
+      await request("POST", "/hook/post-tooluse", {
+        sessionId: claudeSessionId,
+        toolName: "Write",
+        title: "Write: file2.ts",
+        usage: { inputTokens: 300, outputTokens: 150 },
+      });
+
+      // セッションのトークン数が最新の合計値に設定されていることを確認
+      const sessionRes = await request("GET", `/api/sessions/${sessionId}`);
+      const sessionJson = await sessionRes.json();
+      expect(sessionJson.inputTokens).toBe(300);
+      expect(sessionJson.outputTokens).toBe(150);
+    });
+
+    it("usage情報がない場合はトークン更新をスキップする", async () => {
+      // セッションを作成
+      const claudeSessionId = `test-session-no-usage-${Date.now()}`;
+      const createRes = await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId,
+        workingDirectory: "/tmp/test",
+      });
+      const createJson = await createRes.json();
+      const sessionId = createJson.id;
+
+      // usage情報なしでpost-tooluseを呼び出し
+      const res = await request("POST", "/hook/post-tooluse", {
+        sessionId: claudeSessionId,
+        toolName: "Read",
+        title: "Read: /path/to/file.ts",
+      });
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.status).toBe("recorded");
+      expect(json.tokensUpdated).toBeUndefined();
+
+      // セッションのトークン数は0のまま
+      const sessionRes = await request("GET", `/api/sessions/${sessionId}`);
+      const sessionJson = await sessionRes.json();
+      expect(sessionJson.inputTokens).toBe(0);
+      expect(sessionJson.outputTokens).toBe(0);
+    });
+  });
+
+  // ==================== クリーンアップテスト ====================
+  describe("起動時クリーンアップ", () => {
+    it("新規セッション開始時に最近作成されたセッションはクリーンアップされない", async () => {
+      // 30分以内に作成されたセッションはクリーンアップ対象外
+      const workingDir = "/tmp/cleanup-test-project";
+
+      // 1つ目のセッションを作成
+      const claudeSessionId1 = `cleanup-session-1-${Date.now()}`;
+      const res1 = await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId1,
+        workingDirectory: workingDir,
+      });
+      expect(res1.status).toBe(201);
+      const json1 = await res1.json();
+      const sessionId1 = json1.id;
+
+      // 2つ目のセッションを作成
+      const claudeSessionId2 = `cleanup-session-2-${Date.now()}`;
+      const res2 = await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId2,
+        workingDirectory: workingDir,
+      });
+      expect(res2.status).toBe(201);
+
+      // 3つ目のセッションを作成
+      const claudeSessionId3 = `cleanup-session-3-${Date.now()}`;
+      const res3 = await request("POST", "/hook/session-start", {
+        sessionId: claudeSessionId3,
+        workingDirectory: workingDir,
+      });
+      expect(res3.status).toBe(201);
+      const json3 = await res3.json();
+      const sessionId3 = json3.id;
+
+      // セッション状態を確認
+      const sessionsRes = await request("GET", `/api/sessions?limit=10`);
+      expect(sessionsRes.status).toBe(200);
+      const sessionsJson = await sessionsRes.json();
+
+      // すべてのセッションがprocessingのまま（30分以内なのでクリーンアップ対象外）
+      const session1 = sessionsJson.items.find(
+        (s: any) => s.sessionId === sessionId1
+      );
+      const session3 = sessionsJson.items.find(
+        (s: any) => s.sessionId === sessionId3
+      );
+      expect(session1?.status).toBe("processing");
+      expect(session3?.status).toBe("processing");
+    });
   });
 
   // ==================== バリデーションテスト ====================

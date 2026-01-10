@@ -17,6 +17,10 @@ import {
   getSessionById,
   getSessionByClaudeId,
   updateSession,
+  cleanupStaleProcessingSessions,
+  touchSession,
+  updateSessionTokens,
+  setSessionTokens,
 } from "../repositories/session";
 import { createObservation } from "../repositories/observation";
 import { processSessionEnd } from "../services/session-end-orchestrator";
@@ -110,12 +114,20 @@ const SessionStartSchema = z.object({
   contextQuery: z.string().max(2000).optional(),
 });
 
+/** トークン使用量スキーマ */
+const UsageSchema = z.object({
+  inputTokens: z.number().int().min(0),
+  outputTokens: z.number().int().min(0),
+});
+
 const SessionEndSchema = z.object({
   sessionId: sessionIdSchema,
   transcriptPath: z.string().max(2048).optional(),
   endedAt: z.string().optional(),
   status: z.enum(["completed", "error", "cancelled"]).optional(),
   metadata: z.record(z.string(), z.string()).optional(),
+  /** トークン使用量（セッション終了時の合計） */
+  usage: UsageSchema.optional(),
 });
 
 const PostToolUseSchema = z.object({
@@ -124,6 +136,8 @@ const PostToolUseSchema = z.object({
   title: z.string().min(1).max(500),
   content: z.string().max(10000).optional().default(""),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  /** トークン使用量（累積更新される） */
+  usage: UsageSchema.optional(),
 });
 
 // ==================== エンドポイント ====================
@@ -180,6 +194,18 @@ hooksRouter.post(
       claudeSessionId: data.sessionId,
       status: "processing",
     });
+
+    // 同じプロジェクトの古いprocessingセッションをcompletedに更新（起動時クリーンアップ）
+    const cleanedUp = cleanupStaleProcessingSessions(
+      project?.projectId,
+      session.sessionId
+    );
+    if (cleanedUp > 0) {
+      log.info("Cleaned up stale processing sessions", {
+        count: cleanedUp,
+        projectId: project?.projectId,
+      });
+    }
 
     if (project) {
       log.info("Session linked to project", {
@@ -301,6 +327,21 @@ hooksRouter.post(
 
     log.info("Session ended", { sessionId: session.sessionId, status });
 
+    // トークン使用量が指定されていればセッションに設定
+    let tokensUpdated: boolean | undefined;
+    if (data.usage) {
+      setSessionTokens(session.sessionId, {
+        inputTokens: data.usage.inputTokens,
+        outputTokens: data.usage.outputTokens,
+      });
+      tokensUpdated = true;
+      log.info("Session tokens set", {
+        sessionId: session.sessionId,
+        inputTokens: data.usage.inputTokens,
+        outputTokens: data.usage.outputTokens,
+      });
+    }
+
     // トランスクリプトがある場合は連鎖処理を実行
     // metadata.transcriptPath または直接 transcriptPath から取得
     const transcriptPath = data.transcriptPath || data.metadata?.transcriptPath;
@@ -323,6 +364,7 @@ hooksRouter.post(
       sessionId: session.sessionId,
       status,
       processingStarted: !!transcriptPath,
+      ...(tokensUpdated && { tokensUpdated }),
     });
   }
 );
@@ -361,6 +403,24 @@ hooksRouter.post(
       },
     });
 
+    // セッションのupdated_atを更新（タイムアウトクリーンアップ対象から除外するため）
+    touchSession(session.sessionId);
+
+    // トークン使用量が指定されていればセッションに設定（全体の合計値）
+    let tokensUpdated: boolean | undefined;
+    if (data.usage) {
+      setSessionTokens(session.sessionId, {
+        inputTokens: data.usage.inputTokens,
+        outputTokens: data.usage.outputTokens,
+      });
+      tokensUpdated = true;
+      log.debug("Session tokens set", {
+        sessionId: session.sessionId,
+        inputTokens: data.usage.inputTokens,
+        outputTokens: data.usage.outputTokens,
+      });
+    }
+
     log.debug("Tool use recorded", {
       observationId: observation.observationId,
       toolName: data.toolName,
@@ -369,6 +429,7 @@ hooksRouter.post(
     return c.json({
       observationId: observation.observationId,
       status: "recorded",
+      ...(tokensUpdated && { tokensUpdated }),
     });
   }
 );
