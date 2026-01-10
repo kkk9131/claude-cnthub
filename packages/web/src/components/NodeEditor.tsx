@@ -317,9 +317,19 @@ interface SessionNodeData {
   status?: string;
   date?: string;
   tokenCount?: number;
+  inputTokens?: number;
+  outputTokens?: number;
   projectName?: string;
   isHovered?: boolean;
   onClick?: () => void;
+  /** 問題があるかどうか */
+  hasIssues?: boolean;
+  /** 問題タイプ */
+  issueType?: string;
+  /** 重要度 */
+  importance?: string;
+  /** カテゴリ */
+  category?: string;
   [key: string]: unknown;
 }
 
@@ -342,8 +352,11 @@ interface ContextNodeData {
   sessionName?: string;
   status?: string;
   tokenCount?: number;
+  inputTokens?: number;
+  outputTokens?: number;
   connectedCount: number;
   observationCount: number;
+  projectName?: string;
   onExport?: () => void;
   mergeStatus?: MergeStatus;
   mergedSummary?: MergedSummary;
@@ -358,6 +371,31 @@ function formatTokenCount(count: number): string {
   return count.toString();
 }
 
+// 問題タイプのラベル
+const ISSUE_TYPE_LABELS: Record<string, string> = {
+  error_loop: "エラーの繰り返し",
+  edit_loop: "編集ループ",
+  test_failure_loop: "テスト失敗ループ",
+  rollback: "ロールバック",
+  other: "その他の問題",
+};
+
+// 重要度のスタイル
+const IMPORTANCE_STYLES: Record<string, string> = {
+  high: "bg-red-500/20 text-red-400 border-red-500/50",
+  medium: "bg-yellow-500/20 text-yellow-400 border-yellow-500/50",
+  low: "bg-gray-500/20 text-gray-400 border-gray-500/50",
+};
+
+// カテゴリのラベル
+const CATEGORY_LABELS: Record<string, string> = {
+  feature: "機能追加",
+  bugfix: "バグ修正",
+  refactor: "リファクタ",
+  exploration: "調査",
+  other: "その他",
+};
+
 // セッションノードコンポーネント
 function SessionNode({ data }: { data: SessionNodeData }) {
   const handleKeyDown = useCallback(
@@ -370,18 +408,25 @@ function SessionNode({ data }: { data: SessionNodeData }) {
     [data]
   );
 
+  const issueLabel = data.issueType
+    ? ISSUE_TYPE_LABELS[data.issueType] || data.issueType
+    : "問題あり";
+
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={data.onClick}
       onKeyDown={handleKeyDown}
-      aria-label={`Session: ${data.label}${data.projectName ? ` - Project: ${data.projectName}` : ""}`}
+      aria-label={`Session: ${data.label}${data.projectName ? ` - Project: ${data.projectName}` : ""}${data.hasIssues ? ` - ${issueLabel}` : ""}`}
       className={
-        "group px-4 py-3 bg-[var(--bg-surface)] border rounded-lg shadow-md w-[180px] h-[70px] relative transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-400)] focus:ring-offset-2 focus:ring-offset-[var(--bg-base)] " +
+        "session-node group px-4 py-3 bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] rounded-lg shadow-md w-[180px] h-[70px] relative transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-400)] focus:ring-offset-2 focus:ring-offset-[var(--bg-base)] " +
+        (data.hasIssues ? "border-red-500/50 bg-red-500/10 " : "") +
         (data.isHovered
-          ? "border-[var(--color-primary-400)] ring-2 ring-[var(--color-primary-400)]/50 scale-105"
-          : "border-[var(--border-default)] hover:border-[var(--color-primary-400)] hover:shadow-lg")
+          ? "border-[var(--color-primary-400)] bg-[var(--color-primary-400)]/10 ring-2 ring-[var(--color-primary-400)]/50 scale-105"
+          : data.hasIssues
+            ? ""
+            : "hover:bg-[var(--color-primary-400)]/10 hover:border-[var(--color-primary-400)] hover:shadow-lg")
       }
     >
       <Handle
@@ -390,12 +435,25 @@ function SessionNode({ data }: { data: SessionNodeData }) {
         className="w-3 h-3 bg-[var(--color-primary-500)]"
         aria-hidden="true"
       />
-      {data.tokenCount !== undefined && (
+      {/* バグアイコン */}
+      {data.hasIssues && (
         <div
-          className="absolute -top-2 -right-2 bg-[var(--bg-elevated)] text-[var(--text-muted)] text-xs px-1.5 py-0.5 rounded-full border border-[var(--border-default)]"
-          aria-label={`Token count: ${data.tokenCount}`}
+          className="absolute -top-2 -left-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center cursor-help"
+          title={issueLabel}
         >
-          {formatTokenCount(data.tokenCount)}
+          <span role="img" aria-label="問題あり">
+            {"\u{1F41B}"}
+          </span>
+        </div>
+      )}
+      {/* トークン数表示 */}
+      {(data.inputTokens !== undefined || data.outputTokens !== undefined) && (
+        <div
+          className="absolute -top-2 -right-2 bg-[var(--bg-elevated)] text-[var(--text-muted)] text-[10px] px-1.5 py-0.5 rounded-full border border-[var(--border-default)] whitespace-nowrap"
+          aria-label={`Input: ${data.inputTokens || 0}, Output: ${data.outputTokens || 0}`}
+        >
+          in:{formatTokenCount(data.inputTokens || 0)} / out:
+          {formatTokenCount(data.outputTokens || 0)}
         </div>
       )}
       <div className="text-sm font-medium text-[var(--text-primary)] truncate">
@@ -411,6 +469,24 @@ function SessionNode({ data }: { data: SessionNodeData }) {
             title={data.projectName}
           >
             {data.projectName}
+          </span>
+        )}
+        {/* 重要度バッジ */}
+        {data.importance && data.importance !== "medium" && (
+          <span
+            className={`px-1 py-0.5 rounded text-[8px] font-bold border ${IMPORTANCE_STYLES[data.importance] || ""}`}
+            title={`重要度: ${data.importance}`}
+          >
+            {data.importance === "high" ? "HIGH" : "LOW"}
+          </span>
+        )}
+        {/* カテゴリバッジ */}
+        {data.category && (
+          <span
+            className="px-1 py-0.5 bg-[var(--bg-elevated)] rounded text-[8px] text-[var(--text-muted)]"
+            title={CATEGORY_LABELS[data.category] || data.category}
+          >
+            {CATEGORY_LABELS[data.category] || data.category}
           </span>
         )}
       </div>
@@ -443,17 +519,30 @@ function ContextNode({ data }: { data: ContextNodeData }) {
         position={Position.Left}
         className="w-3 h-3 bg-[var(--color-cream-100)]"
       />
-      {data.tokenCount !== undefined && (
-        <div className="absolute -top-2 -right-2 bg-white text-[var(--color-primary-600)] text-xs font-bold px-1.5 py-0.5 rounded-full border-2 border-[var(--color-primary-600)]">
-          {formatTokenCount(data.tokenCount)}
+      {(data.inputTokens !== undefined || data.outputTokens !== undefined) && (
+        <div className="absolute -top-2 -right-2 bg-white text-[var(--color-primary-600)] text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-[var(--color-primary-600)] whitespace-nowrap">
+          in:{formatTokenCount(data.inputTokens || 0)} / out:
+          {formatTokenCount(data.outputTokens || 0)}
         </div>
       )}
       <div className="text-sm font-bold truncate max-w-[220px]">
         {hasSession ? data.sessionName || data.sessionId : "セッション未接続"}
       </div>
-      {hasSession && data.sessionId && (
-        <div className="text-xs opacity-60 mt-1 font-mono">
-          {data.sessionId}
+      {hasSession && (
+        <div className="flex items-center gap-2 mt-1">
+          {data.projectName && (
+            <span
+              className="px-1.5 py-0.5 bg-white/20 rounded text-xs truncate max-w-[100px]"
+              title={data.projectName}
+            >
+              {data.projectName}
+            </span>
+          )}
+          {data.sessionId && (
+            <span className="text-xs opacity-60 font-mono truncate">
+              {data.sessionId}
+            </span>
+          )}
         </div>
       )}
       <div className="text-xs opacity-90 mt-3 flex justify-center gap-3">
@@ -506,7 +595,17 @@ interface Session {
   status: string;
   updatedAt: string;
   tokenCount?: number;
+  inputTokens?: number;
+  outputTokens?: number;
   projectId?: string;
+  /** 問題があるかどうか */
+  hasIssues?: boolean;
+  /** 問題タイプ */
+  issueType?: string;
+  /** 重要度 */
+  importance?: string;
+  /** カテゴリ */
+  category?: string;
 }
 
 interface Project {
@@ -528,6 +627,8 @@ interface CurrentSessionData {
   observations: Observation[];
   observationCount: number;
   tokenCount: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 interface DeleteTarget {
@@ -684,8 +785,13 @@ export function NodeEditor({
               sessionName: session.name,
               status: session.status,
               tokenCount: data.tokenCount,
+              inputTokens: session.inputTokens ?? data.inputTokens,
+              outputTokens: session.outputTokens ?? data.outputTokens,
               connectedCount: connectedSessionIds.length,
               observationCount: data.observationCount,
+              projectName: session.projectId
+                ? projectMap.get(session.projectId)
+                : undefined,
               onExport: createExportHandler(session.sessionId),
               mergeStatus,
               mergedSummary,
@@ -728,8 +834,13 @@ export function NodeEditor({
                   sessionName: data.session.name,
                   status: data.session.status,
                   tokenCount: data.tokenCount,
+                  inputTokens: data.session.inputTokens ?? data.inputTokens,
+                  outputTokens: data.session.outputTokens ?? data.outputTokens,
                   connectedCount: connectedSessionIds.length,
                   observationCount: data.observationCount,
+                  projectName: data.session.projectId
+                    ? projectMap.get(data.session.projectId)
+                    : undefined,
                   onExport: createExportHandler(data.session.sessionId),
                   mergeStatus,
                   mergedSummary,
@@ -760,6 +871,7 @@ export function NodeEditor({
     setNodes,
     mergeStatus,
     mergedSummary,
+    projectMap,
   ]);
 
   // セッション一覧からノードを生成（保存された位置を復元、重複回避）
@@ -774,7 +886,7 @@ export function NodeEditor({
         sessions.map((s) => ["session-" + s.sessionId, s])
       );
 
-      // 既存ノードを更新（名前やステータスの変更を反映）
+      // 既存ノードを更新（名前やステータス、トークン数の変更を反映）
       const updatedNodes = nds.map((node) => {
         if (node.type === "session") {
           const session = sessionMap.get(node.id);
@@ -782,10 +894,15 @@ export function NodeEditor({
             const projectName = session.projectId
               ? projectMap.get(session.projectId)
               : undefined;
-            // 名前、プロジェクトが変わった場合は更新
+            // 名前、プロジェクト、トークン数、分類情報が変わった場合は更新
             if (
               node.data.label !== session.name ||
-              node.data.projectName !== projectName
+              node.data.projectName !== projectName ||
+              node.data.inputTokens !== session.inputTokens ||
+              node.data.outputTokens !== session.outputTokens ||
+              node.data.hasIssues !== session.hasIssues ||
+              node.data.importance !== session.importance ||
+              node.data.category !== session.category
             ) {
               return {
                 ...node,
@@ -795,7 +912,13 @@ export function NodeEditor({
                   status: session.status,
                   date: new Date(session.updatedAt).toLocaleDateString("ja-JP"),
                   tokenCount: session.tokenCount,
+                  inputTokens: session.inputTokens,
+                  outputTokens: session.outputTokens,
                   projectName,
+                  hasIssues: session.hasIssues,
+                  issueType: session.issueType,
+                  importance: session.importance,
+                  category: session.category,
                 },
               };
             }
@@ -835,7 +958,13 @@ export function NodeEditor({
               status: session.status,
               date: new Date(session.updatedAt).toLocaleDateString("ja-JP"),
               tokenCount: session.tokenCount,
+              inputTokens: session.inputTokens,
+              outputTokens: session.outputTokens,
               projectName,
+              hasIssues: session.hasIssues,
+              issueType: session.issueType,
+              importance: session.importance,
+              category: session.category,
               onClick: () => onSessionDetail?.(session.sessionId),
             },
           };
@@ -1086,25 +1215,6 @@ export function NodeEditor({
     [connectedSessionIds, setNodes, setEdges, edgeMapping]
   );
 
-  // ノードクリック時（セッションノードの削除確認を表示）
-  const onNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
-      // コンテキストノードはクリックでexport（ContextNode内で処理）
-      if (node.id.startsWith("context-")) return;
-
-      // セッションノードは削除確認
-      const sessionId = node.id.replace("session-", "");
-      const session = sessions.find((s) => s.sessionId === sessionId);
-
-      onDeleteRequest?.({
-        type: "node",
-        id: node.id,
-        name: session?.name || sessionId,
-      });
-    },
-    [sessions, onDeleteRequest]
-  );
-
   // ノードドラッグ終了時に衝突検出と保存
   const onNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -1196,7 +1306,6 @@ export function NodeEditor({
         onConnect={onConnect}
         onEdgesDelete={onEdgeDelete}
         onEdgeClick={onEdgeClick}
-        onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         nodeTypes={nodeTypes}
         fitView

@@ -28,7 +28,11 @@ interface Session {
   updatedAt: string;
   projectId?: string;
   tokenCount?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
+
+type DeleteSessionTarget = Pick<Session, "sessionId" | "name">;
 
 interface Observation {
   observationId: string;
@@ -44,6 +48,8 @@ interface CurrentSessionData {
   observations: Observation[];
   observationCount: number;
   tokenCount: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 interface MergedSummary {
@@ -69,7 +75,9 @@ export function ViewerPage() {
     CurrentSessionData[]
   >([]);
   const [smartExportOpen, setSmartExportOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteSessionTarget | null>(
+    null
+  );
   const [editorDeleteTarget, setEditorDeleteTarget] = useState<{
     type: "node" | "edge";
     id: string;
@@ -160,6 +168,8 @@ export function ViewerPage() {
                   observations: obsData.items || [],
                   observationCount: obsData.items?.length || 0,
                   tokenCount: session.tokenCount || 0,
+                  inputTokens: session.inputTokens,
+                  outputTokens: session.outputTokens,
                 };
               }
             } catch {
@@ -170,6 +180,8 @@ export function ViewerPage() {
               observations: [],
               observationCount: 0,
               tokenCount: session.tokenCount || 0,
+              inputTokens: session.inputTokens,
+              outputTokens: session.outputTokens,
             };
           })
         );
@@ -249,28 +261,18 @@ export function ViewerPage() {
     }
   }, [deleteTarget]);
 
-  // 詳細モーダルからの直接削除
-  const handleDeleteFromDetail = useCallback(async (sessionId: string) => {
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error?.message || "削除に失敗しました");
-      }
-
-      // ローカル状態を即座に更新
-      setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
-      setHiddenSessionIds((prev) => prev.filter((id) => id !== sessionId));
-    } catch (err) {
-      console.error("[ViewerPage] Failed to delete session:", err);
-      alert(
-        err instanceof Error ? err.message : "セッションの削除に失敗しました"
+  // 詳細モーダルから削除確認を開く
+  const handleDeleteFromDetail = useCallback(
+    (sessionId: string) => {
+      const target = sessions.find((s) => s.sessionId === sessionId);
+      setDeleteTarget(
+        target
+          ? { sessionId: target.sessionId, name: target.name }
+          : { sessionId, name: sessionId }
       );
-    }
-  }, []);
+    },
+    [sessions]
+  );
 
   // セッション名変更時にローカル状態を更新
   const handleNameChange = useCallback((sessionId: string, newName: string) => {
