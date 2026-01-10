@@ -55,6 +55,18 @@ describe("Hook API", () => {
     execute("DELETE FROM sessions");
   });
 
+  // ==================== GET /hook/health ====================
+  describe("GET /hook/health", () => {
+    it("ヘルスチェックが正常に動作する", async () => {
+      const res = await request("GET", "/hook/health");
+
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.status).toBe("ok");
+      expect(json.timestamp).toBeDefined();
+    });
+  });
+
   // ==================== セキュリティテスト ====================
   describe("セキュリティ", () => {
     it("非localhostからのリクエストを拒否する", async () => {

@@ -4,8 +4,10 @@
  * Claude Code プラグインからの Hook イベントを受信。
  *
  * エンドポイント:
+ * - GET  /hook/health        - ヘルスチェック
  * - POST /hook/session-start - セッション開始
  * - POST /hook/session-end   - セッション終了（要約生成トリガー）
+ * - POST /hook/post-tooluse  - ツール使用記録
  */
 
 import { Hono } from "hono";
@@ -142,6 +144,18 @@ const PostToolUseSchema = z.object({
 });
 
 // ==================== エンドポイント ====================
+
+/**
+ * GET /hook/health - ヘルスチェック
+ *
+ * Hook API の疎通確認用エンドポイント。
+ */
+hooksRouter.get("/health", (c) => {
+  return c.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+  });
+});
 
 /**
  * POST /hook/session-start - セッション開始
