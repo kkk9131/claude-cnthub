@@ -34,10 +34,12 @@ import {
   getSessionByClaudeId,
   forkSession,
   listForks,
+  updateSessionWorktreePath,
 } from "../repositories/session";
 import { findProjectByWorkingDir } from "../services/project-linking";
 import { getSessionsTokenCounts } from "../repositories/observation";
 import { generateNameFromMessage } from "../services/session-naming";
+import { createWorktree } from "../services/git-worktree";
 import { messagesRouter } from "./messages";
 import { observationsRouter } from "./observations";
 
@@ -361,11 +363,49 @@ sessionsRouter.post(
     const data = c.req.valid("json");
 
     try {
+      // セッションを分岐
       const result = forkSession(id, {
         name: data.name,
         createWorktree: data.createWorktree,
         forkPoint: data.forkPoint,
       });
+
+      // worktree作成が要求された場合
+      if (data.createWorktree) {
+        const worktreeResult = await createWorktree(
+          result.parentSession.workingDir,
+          result.forkedSession.sessionId
+        );
+
+        if (worktreeResult.success && worktreeResult.worktreePath) {
+          // worktreeパスをセッションに保存
+          const updatedSession = updateSessionWorktreePath(
+            result.forkedSession.sessionId,
+            worktreeResult.worktreePath
+          );
+
+          if (updatedSession) {
+            return c.json(
+              {
+                ...result,
+                forkedSession: updatedSession,
+                worktreePath: worktreeResult.worktreePath,
+                branchName: worktreeResult.branchName,
+              },
+              201
+            );
+          }
+        } else {
+          // worktree作成失敗（セッションは作成済み）
+          return c.json(
+            {
+              ...result,
+              worktreeError: worktreeResult.error,
+            },
+            201
+          );
+        }
+      }
 
       return c.json(result, 201);
     } catch (error) {
