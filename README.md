@@ -2,6 +2,31 @@
 
 Claude Code Plugin for session management and AI memory. Captures session summaries, enables semantic search, and provides cross-session context injection.
 
+## Why claude-cnthub?
+
+Claude Codeで作業すると、セッションが終われば文脈は消えます。
+claude-cnthubは**セッションを自動保存・要約し、次回の作業に活かせる**ようにします。
+
+- 「先週やったあの実装、どうやったっけ？」→ **検索で即発見**
+- 「前回の続きから」→ **コンテキスト自動注入**
+- セッション間の関連付けを**ビジュアル化**
+
+## Quick Start
+
+```bash
+# 1. インストール
+claude plugin install /path/to/claude-cnthub/plugin
+
+# 2. 使うだけ（自動で動作）
+# Claude Codeを普通に使うだけで、セッションが自動記録されます
+
+# 3. 過去を検索（MCP Tool）
+search("認証機能の実装")
+
+# 4. Web UIで確認
+open http://localhost:3048/viewer/
+```
+
 ## Features
 
 - **Session Tracking**: Automatically captures and summarizes Claude Code sessions
