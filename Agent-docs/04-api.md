@@ -33,6 +33,8 @@ supermemory 参考のシンプルな 3 エンドポイント:
 | PATCH | `/api/sessions/:id` | セッション更新 |
 | DELETE | `/api/sessions/:id` | セッション削除 (論理削除) |
 | GET | `/api/sessions/:id/observations` | 観測記録一覧 |
+| POST | `/api/sessions/:id/fork` | セッション分岐 |
+| GET | `/api/sessions/:id/forks` | 分岐セッション一覧 |
 
 ### Merges API
 
@@ -263,6 +265,75 @@ Claude Code セッション開始
     "context": "## 最近のセッション\n- ch_ss_0010: マージシステム実装完了\n\n## 最近の決定事項\n- Skills + Worker API を採用",
     "tokenCount": 150
   }
+}
+```
+
+### POST /api/sessions/:id/fork
+
+セッション分岐
+
+**Request:**
+
+```json
+{
+  "name": "A案: GraphQL実装",
+  "createWorktree": true,
+  "forkPoint": 5
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | No | 分岐後のセッション名（省略時は自動生成） |
+| `createWorktree` | boolean | No | git worktree を作成するか（default: false） |
+| `forkPoint` | number | No | 分岐時点のメッセージインデックス（省略時は現在） |
+
+**Response: 201 Created**
+
+```json
+{
+  "forkedSession": {
+    "sessionId": "ch_ss_0042",
+    "name": "A案: GraphQL実装",
+    "parentSessionId": "ch_ss_0010",
+    "forkPoint": 5,
+    "worktreePath": "/path/to/worktree-ch_ss_0042"
+  },
+  "parentSession": {
+    "sessionId": "ch_ss_0010",
+    "name": "Phase 7 マージシステム実装"
+  },
+  "forkPoint": 5,
+  "worktreePath": "/path/to/worktree-ch_ss_0042",
+  "branchName": "fork/ch_ss_0042"
+}
+```
+
+### GET /api/sessions/:id/forks
+
+分岐セッション一覧
+
+**Response: 200 OK**
+
+```json
+{
+  "forks": [
+    {
+      "sessionId": "ch_ss_0042",
+      "name": "A案: GraphQL実装",
+      "status": "active",
+      "forkPoint": 5,
+      "worktreePath": "/path/to/worktree-ch_ss_0042"
+    },
+    {
+      "sessionId": "ch_ss_0043",
+      "name": "B案: REST API実装",
+      "status": "completed",
+      "forkPoint": 5,
+      "worktreePath": null
+    }
+  ],
+  "parentSessionId": "ch_ss_0010"
 }
 ```
 

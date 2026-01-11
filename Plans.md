@@ -33,6 +33,7 @@ claude-cnthub: Claude Code の「最適化エンジン」（見る + 操作 + AI
 /cnthub:
 ├── get              # 過去セッションから注入
 ├── export           # 現在のやり取りを保存
+├── fork             # セッション分岐（A案/B案並行試行）
 ├── optimize         # 全体最適化
 ├── optimize:skills  # Skills 最適化
 ├── optimize:hooks   # Hooks 最適化
@@ -52,6 +53,22 @@ Phase 0〜2 完了: 基盤構築、Plugin機能、Smart Export、Context Managem
 ## Phase 3: セッション品質・コンテキスト管理 `cc:TODO`
 
 > 目的: セッションの品質可視化、自動コンテキスト注入、ネガティブ学習
+
+### Wave 0: セッション分岐 ✅
+
+| ID | タスク | 優先度 | 状態 |
+|----|--------|--------|------|
+| FRK-01 | `/cnthub:fork` コマンド定義 | 🔴 High | ✅ `cc:完了` |
+| FRK-02 | DB migration (parent_session_id, fork_point, worktree_path) | 🔴 High | ✅ `cc:完了` |
+| FRK-03 | Session fork API エンドポイント | 🔴 High | ✅ `cc:完了` |
+| FRK-04 | git worktree サービス | 🔴 High | ✅ `cc:完了` |
+| FRK-05 | MCP tools (fork_session, list_forks) | 🔴 High | ✅ `cc:完了` |
+
+**実装詳細:**
+- セッションを分岐して別アプローチを並行で試行可能
+- git worktree 連携でコード変更も分離
+- ブランチ名: `fork/{sessionId}`
+- API: `POST /sessions/:id/fork`, `GET /sessions/:id/forks`
 
 ### Wave 1: トークン・品質可視化 ✅
 
@@ -169,6 +186,16 @@ Phase 0〜2 完了: 基盤構築、Plugin機能、Smart Export、Context Managem
 | EXT-01 | settings.json 最適化 | 将来 |
 | EXT-02 | subagent 最適化 | 将来 |
 | EXT-03 | Cross-LLM 連携 | 将来 |
+
+### セッション分岐の拡張 `将来`
+
+| ID | タスク | 説明 |
+|----|--------|------|
+| FRK-EXT-01 | UI: 分岐ツリー表示 | セッション関係をグラフで可視化 |
+| FRK-EXT-02 | 分岐マージ機能 | 複数分岐の結果を統合 |
+| FRK-EXT-03 | 分岐比較ビュー | A案/B案の差分を並列表示 |
+| FRK-EXT-04 | worktree 自動クリーンアップ | 不要な worktree を定期削除 |
+| FRK-EXT-05 | メッセージコピー機能 | 分岐時に過去メッセージも複製 |
 
 ---
 
