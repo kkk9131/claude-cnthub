@@ -87,6 +87,17 @@ export type BulkDeleteSessionsRequest = z.infer<
   typeof BulkDeleteSessionsSchema
 >;
 
+/**
+ * セッション分岐リクエスト
+ */
+export const ForkSessionSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  createWorktree: z.boolean().default(false),
+  forkPoint: z.number().int().positive().optional(),
+});
+
+export type ForkSessionRequest = z.infer<typeof ForkSessionSchema>;
+
 // ==================== Messages ====================
 
 /**

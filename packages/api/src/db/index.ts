@@ -135,6 +135,7 @@ import { migration as migration008 } from "./migrations/008_add_local_embeddings
 import { migration as migration009 } from "./migrations/009_add_session_edges";
 import { migration as migration010 } from "./migrations/010_add_token_counts";
 import { migration as migration011 } from "./migrations/011_add_session_classification";
+import { migration as migration012 } from "./migrations/012_add_session_fork";
 
 // 全マイグレーションリスト
 const allMigrations = [
@@ -149,6 +150,7 @@ const allMigrations = [
   migration009,
   migration010,
   migration011,
+  migration012,
 ];
 
 /**

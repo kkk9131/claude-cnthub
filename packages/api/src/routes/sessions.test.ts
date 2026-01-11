@@ -444,4 +444,145 @@ describe("Sessions API", () => {
       }
     });
   });
+
+  // ===== POST /api/sessions/:id/fork =====
+  describe("POST /api/sessions/:id/fork", () => {
+    it("セッションを分岐できる", async () => {
+      // 親セッションを作成
+      const createRes = await request(
+        "POST",
+        "/api/sessions",
+        createSessionRequestFixture()
+      );
+      const parent = await createRes.json();
+
+      // 分岐
+      const forkRes = await request(
+        "POST",
+        `/api/sessions/${parent.sessionId}/fork`,
+        {}
+      );
+      const forkJson = await forkRes.json();
+
+      expect(forkRes.status).toBe(201);
+      expect(forkJson.forkedSession).toBeDefined();
+      expect(forkJson.parentSession).toBeDefined();
+      expect(forkJson.forkedSession.sessionId).not.toBe(parent.sessionId);
+      expect(forkJson.forkedSession.parentSessionId).toBe(parent.sessionId);
+      expect(forkJson.forkPoint).toBe(0); // メッセージがないので0
+    });
+
+    it("カスタム名で分岐できる", async () => {
+      const createRes = await request(
+        "POST",
+        "/api/sessions",
+        createSessionRequestFixture()
+      );
+      const parent = await createRes.json();
+
+      const forkRes = await request(
+        "POST",
+        `/api/sessions/${parent.sessionId}/fork`,
+        { name: "A案: GraphQL実装" }
+      );
+      const forkJson = await forkRes.json();
+
+      expect(forkRes.status).toBe(201);
+      expect(forkJson.forkedSession.name).toBe("A案: GraphQL実装");
+    });
+
+    it("親セッションの設定を継承する", async () => {
+      const createRes = await request("POST", "/api/sessions", {
+        ...createSessionRequestFixture(),
+        task: "Implement feature X",
+        continueChat: true,
+      });
+      const parent = await createRes.json();
+
+      const forkRes = await request(
+        "POST",
+        `/api/sessions/${parent.sessionId}/fork`,
+        {}
+      );
+      const forkJson = await forkRes.json();
+
+      expect(forkRes.status).toBe(201);
+      expect(forkJson.forkedSession.workingDir).toBe(parent.workingDir);
+      expect(forkJson.forkedSession.task).toBe(parent.task);
+      expect(forkJson.forkedSession.continueChat).toBe(parent.continueChat);
+    });
+
+    it("存在しないセッションからの分岐は404を返す", async () => {
+      const res = await request(
+        "POST",
+        "/api/sessions/nonexistent_session/fork",
+        {}
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(404);
+      expect(json.error).toBe("Session not found");
+    });
+  });
+
+  // ===== GET /api/sessions/:id/forks =====
+  describe("GET /api/sessions/:id/forks", () => {
+    it("分岐セッション一覧を取得できる", async () => {
+      // 親セッションを作成
+      const createRes = await request(
+        "POST",
+        "/api/sessions",
+        createSessionRequestFixture()
+      );
+      const parent = await createRes.json();
+
+      // 2つの分岐を作成
+      await request("POST", `/api/sessions/${parent.sessionId}/fork`, {
+        name: "Fork 1",
+      });
+      await request("POST", `/api/sessions/${parent.sessionId}/fork`, {
+        name: "Fork 2",
+      });
+
+      // 分岐一覧を取得
+      const listRes = await request(
+        "GET",
+        `/api/sessions/${parent.sessionId}/forks`
+      );
+      const listJson = await listRes.json();
+
+      expect(listRes.status).toBe(200);
+      expect(listJson.forks).toHaveLength(2);
+      expect(listJson.parentSessionId).toBe(parent.sessionId);
+    });
+
+    it("分岐がない場合は空配列を返す", async () => {
+      const createRes = await request(
+        "POST",
+        "/api/sessions",
+        createSessionRequestFixture()
+      );
+      const parent = await createRes.json();
+
+      const listRes = await request(
+        "GET",
+        `/api/sessions/${parent.sessionId}/forks`
+      );
+      const listJson = await listRes.json();
+
+      expect(listRes.status).toBe(200);
+      expect(listJson.forks).toHaveLength(0);
+    });
+
+    it("存在しないセッションは404を返す", async () => {
+      const res = await request(
+        "GET",
+        "/api/sessions/nonexistent_session/forks"
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(404);
+      expect(json.error).toBe("Session not found");
+    });
+  });
 });

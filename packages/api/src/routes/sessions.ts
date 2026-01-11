@@ -21,6 +21,7 @@ import {
   ListSessionsSchema,
   GenerateSessionNameSchema,
   BulkDeleteSessionsSchema,
+  ForkSessionSchema,
 } from "../schemas";
 import {
   createSession,
@@ -31,6 +32,8 @@ import {
   listSessionIndex,
   getSessionSummary,
   getSessionByClaudeId,
+  forkSession,
+  listForks,
 } from "../repositories/session";
 import { findProjectByWorkingDir } from "../services/project-linking";
 import { getSessionsTokenCounts } from "../repositories/observation";
@@ -333,6 +336,69 @@ sessionsRouter.post(
     return c.json({ name, sessionId: session.sessionId });
   }
 );
+
+/**
+ * POST /sessions/:id/fork - セッション分岐
+ *
+ * 指定されたセッションを分岐し、新しいセッションを作成する。
+ * 元のセッションは変更されない。
+ */
+sessionsRouter.post(
+  "/:id/fork",
+  zValidator("json", ForkSessionSchema, (result, c) => {
+    if (!result.success) {
+      return c.json(
+        {
+          error: "Validation Error",
+          details: result.error.flatten().fieldErrors,
+        },
+        400
+      );
+    }
+  }),
+  async (c) => {
+    const id = c.req.param("id");
+    const data = c.req.valid("json");
+
+    try {
+      const result = forkSession(id, {
+        name: data.name,
+        createWorktree: data.createWorktree,
+        forkPoint: data.forkPoint,
+      });
+
+      return c.json(result, 201);
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "status" in error &&
+        error.status === 404
+      ) {
+        return c.json({ error: "Session not found", sessionId: id }, 404);
+      }
+      throw error;
+    }
+  }
+);
+
+/**
+ * GET /sessions/:id/forks - 分岐セッション一覧
+ *
+ * 指定されたセッションから分岐したセッション一覧を取得する。
+ */
+sessionsRouter.get("/:id/forks", async (c) => {
+  const id = c.req.param("id");
+
+  // セッションの存在確認
+  const session = getSessionById(id);
+  if (!session) {
+    return c.json({ error: "Session not found", sessionId: id }, 404);
+  }
+
+  const forks = listForks(id);
+  return c.json({ forks, parentSessionId: session.sessionId });
+});
 
 /**
  * Messages サブルート

@@ -13,6 +13,8 @@ import type {
   SessionIndex,
   SessionIndexListResponse,
   ExtendedSessionSummary,
+  ForkSessionRequest,
+  ForkSessionResponse,
 } from "@claude-cnthub/shared";
 import { generateSequentialId, parseId } from "@claude-cnthub/shared";
 import { query, queryOne, execute } from "../db";
@@ -71,9 +73,13 @@ function toSession(row: Record<string, unknown>): Session {
     "deleted_at",
   ]);
   // has_issues は INTEGER として保存されているので boolean に変換
+  // fork関連フィールドも変換
   return {
     ...entity,
     hasIssues: (row.has_issues as number) === 1,
+    parentSessionId: (row.parent_session_id as string) || undefined,
+    forkPoint: (row.fork_point as number) || undefined,
+    worktreePath: (row.worktree_path as string) || undefined,
   };
 }
 
@@ -893,6 +899,157 @@ export function listSessionsWithIssues(
     throw new AppError(
       ErrorCode.DATABASE_ERROR,
       `Failed to list sessions with issues: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
+ * セッションを分岐
+ *
+ * 指定されたセッションを分岐し、新しいセッションを作成する。
+ * 元のセッションは変更されない。
+ *
+ * @param parentSessionId - 分岐元セッションID
+ * @param request - 分岐リクエスト
+ * @returns 分岐レスポンス
+ */
+export function forkSession(
+  parentSessionId: string,
+  request: ForkSessionRequest = {}
+): ForkSessionResponse {
+  try {
+    // 親セッションを取得
+    const parentSession = getSessionById(parentSessionId);
+    if (!parentSession) {
+      throw new AppError(
+        ErrorCode.NOT_FOUND,
+        `Session not found: ${parentSessionId}`,
+        404
+      );
+    }
+
+    // メッセージ数を取得してfork_pointを決定
+    const messageCountResult = queryOne<{ count: number }>(
+      `SELECT COUNT(*) as count FROM messages WHERE session_id = ?`,
+      parentSession.sessionId
+    );
+    const messageCount = messageCountResult?.count ?? 0;
+    const forkPoint = request.forkPoint ?? messageCount;
+
+    // 新しいセッションを作成
+    const nextSeq = getNextSessionSequence();
+    const forkedSessionId = generateSequentialId("SESSION", nextSeq);
+    const timestamp = now();
+
+    // セッション名を決定
+    const forkedName =
+      request.name || `${parentSession.name} (fork #${nextSeq})`;
+
+    execute(
+      `INSERT INTO sessions (
+        session_id, name, working_dir, task, status,
+        work_item_id, project_id, continue_chat, dangerously_skip_permissions,
+        parent_session_id, fork_point, worktree_path,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'idle', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      forkedSessionId,
+      forkedName,
+      parentSession.workingDir,
+      parentSession.task ?? null,
+      parentSession.workItemId ?? null,
+      parentSession.projectId ?? null,
+      parentSession.continueChat ? 1 : 0,
+      parentSession.dangerouslySkipPermissions ? 1 : 0,
+      parentSession.sessionId, // parent_session_id
+      forkPoint, // fork_point
+      request.createWorktree ? null : null, // worktree_path（後で更新）
+      timestamp,
+      timestamp
+    );
+
+    const forkedSession = getSessionById(forkedSessionId)!;
+
+    return {
+      forkedSession,
+      parentSession,
+      forkPoint,
+      worktreePath: forkedSession.worktreePath,
+    };
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to fork session: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
+ * 分岐セッション一覧を取得
+ *
+ * 指定されたセッションから分岐したセッション一覧を取得する。
+ *
+ * @param parentSessionId - 親セッションID
+ * @returns 分岐セッション一覧
+ */
+export function listForks(parentSessionId: string): Session[] {
+  try {
+    // 親セッションを取得して、実際のsession_idを解決
+    const parentSession = getSessionById(parentSessionId);
+    if (!parentSession) {
+      return [];
+    }
+
+    const rows = query<Record<string, unknown>>(
+      `SELECT * FROM sessions
+       WHERE parent_session_id = ? AND deleted_at IS NULL
+       ORDER BY created_at DESC`,
+      parentSession.sessionId
+    );
+
+    return rows.map(toSession);
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to list forks: ${error instanceof Error ? error.message : "Unknown error"}`,
+      500
+    );
+  }
+}
+
+/**
+ * セッションのworktree_pathを更新
+ *
+ * @param sessionId - セッションID
+ * @param worktreePath - worktree パス
+ * @returns 更新後のセッション
+ */
+export function updateSessionWorktreePath(
+  sessionId: string,
+  worktreePath: string
+): Session | null {
+  try {
+    const existingSession = getSessionById(sessionId);
+    if (!existingSession) {
+      return null;
+    }
+
+    execute(
+      `UPDATE sessions SET worktree_path = ?, updated_at = ? WHERE session_id = ?`,
+      worktreePath,
+      now(),
+      existingSession.sessionId
+    );
+
+    return getSessionById(existingSession.sessionId);
+  } catch (error) {
+    throw new AppError(
+      ErrorCode.DATABASE_ERROR,
+      `Failed to update worktree path: ${error instanceof Error ? error.message : "Unknown error"}`,
       500
     );
   }

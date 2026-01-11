@@ -43,6 +43,12 @@ export interface Session {
   hasIssues: boolean;
   /** 問題タイプ */
   issueType?: SessionIssueType;
+  /** 分岐元セッションID */
+  parentSessionId?: string;
+  /** 分岐時点のメッセージインデックス */
+  forkPoint?: number;
+  /** git worktree パス */
+  worktreePath?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -67,4 +73,26 @@ export interface SessionListResponse {
     hasNext: boolean;
     hasPrev: boolean;
   };
+}
+
+/** セッション分岐リクエスト */
+export interface ForkSessionRequest {
+  /** 分岐後のセッション名（省略時は自動生成） */
+  name?: string;
+  /** git worktree を作成するかどうか */
+  createWorktree?: boolean;
+  /** 分岐時点のメッセージインデックス（省略時は現在地点） */
+  forkPoint?: number;
+}
+
+/** セッション分岐レスポンス */
+export interface ForkSessionResponse {
+  /** 新しく作成されたセッション */
+  forkedSession: Session;
+  /** 親セッション */
+  parentSession: Session;
+  /** git worktree パス（作成した場合） */
+  worktreePath?: string;
+  /** 分岐時点 */
+  forkPoint: number;
 }
