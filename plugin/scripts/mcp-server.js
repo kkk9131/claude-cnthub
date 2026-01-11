@@ -757,11 +757,63 @@ async function createEdgeApi(sourceSessionId, targetClaudeSessionId) {
 }
 
 /**
- * コンテキスト注入（並列処理）
+ * セッションコンテキストをマークダウン形式で生成
+ * @param {Object} session - セッション情報
+ * @param {Object} summary - 要約情報
+ * @param {string} format - 出力形式
+ * @returns {string} マークダウン形式のコンテキスト
+ */
+function buildContextMarkdown(session, summary, format) {
+  const sessionId = session.sessionId || session.id;
+  const sessionName = session.name || sessionId;
+
+  let content = `## ${sessionName} (${sessionId})\n\n`;
+
+  // 要約
+  const summaryText = summary?.shortSummary || summary?.detailedSummary;
+  if (summaryText) {
+    content += `**要約**: ${summaryText}\n\n`;
+  }
+
+  // 決定事項
+  const decisions = summary?.decisions || summary?.keyDecisions || [];
+  if (decisions.length > 0 && (format === "changes" || format === "full")) {
+    content += `**決定事項**:\n`;
+    for (const decision of decisions) {
+      content += `- ${decision}\n`;
+    }
+    content += "\n";
+  }
+
+  // 変更ファイル
+  const files = summary?.filesModified || [];
+  if (files.length > 0 && format === "full") {
+    content += `**変更ファイル**:\n`;
+    for (const file of files) {
+      content += `- \`${file}\`\n`;
+    }
+    content += "\n";
+  }
+
+  // 変更内容
+  const changes = summary?.changes || [];
+  if (changes.length > 0 && (format === "changes" || format === "full")) {
+    content += `**変更内容**:\n`;
+    for (const change of changes) {
+      content += `- ${change}\n`;
+    }
+    content += "\n";
+  }
+
+  return content;
+}
+
+/**
+ * コンテキスト注入（並列処理）- マークダウン形式で返却
  * @param {Object} options - オプション
  * @param {string[]} options.sessionIds - セッション ID 配列
- * @param {string} [options.format="summary"] - 出力形式
- * @returns {Promise<Array>} コンテキストデータ
+ * @param {string} [options.format="summary"] - 出力形式 (summary, changes, full)
+ * @returns {Promise<string>} マークダウン形式のコンテキスト
  */
 async function injectContext({ sessionIds, format = "summary" }) {
   // 入力バリデーション
@@ -769,10 +821,9 @@ async function injectContext({ sessionIds, format = "summary" }) {
     throw new Error("sessionIds must be a non-empty array");
   }
 
-  // 並列でセッションと要約を取得（Promise.allSettled でエラー分離）
+  // 並列でセッションと要約を取得
   const dataPromises = sessionIds.map(async (sessionId) => {
     try {
-      // セッションと要約を並列で取得
       const [session, summary] = await Promise.all([
         getSession({ sessionId }),
         getSessionSummary({ sessionId }),
@@ -788,73 +839,47 @@ async function injectContext({ sessionIds, format = "summary" }) {
   });
 
   const dataList = await Promise.all(dataPromises);
-  const results = [];
 
-  for (const data of dataList) {
-    // エラーの場合はそのまま追加
-    if (data.status === "rejected") {
-      results.push({ id: data.id, error: data.error });
-      continue;
-    }
+  // マークダウン形式でコンテキストを生成
+  const successfulData = dataList.filter((d) => d.status === "fulfilled");
+  const failedData = dataList.filter((d) => d.status === "rejected");
 
-    const { session, summary } = data;
+  if (successfulData.length === 0) {
+    const errors = failedData.map((d) => `- ${d.id}: ${d.error}`).join("\n");
+    return `# コンテキスト取得エラー\n\n以下のセッションの取得に失敗しました:\n${errors}`;
+  }
 
-    switch (format) {
-      case "summary":
-        results.push({
-          id: session.sessionId || session.id,
-          name: session.name,
-          summary: summary?.shortSummary || "No summary available",
-        });
-        break;
+  // ヘッダー + 指示文
+  let markdown = `# 過去セッションのコンテキスト
 
-      case "changes":
-        results.push({
-          id: session.sessionId || session.id,
-          name: session.name,
-          changes: summary?.changes || [],
-          decisions: summary?.decisions || summary?.keyDecisions || [],
-        });
-        break;
+以下は過去のセッションから取得したコンテキストです。この情報を踏まえて作業を進めてください。
 
-      case "full":
-      default:
-        results.push({
-          ...session,
-          summary,
-        });
+---
+
+`;
+
+  // 各セッションのコンテキストを追加
+  for (const data of successfulData) {
+    markdown += buildContextMarkdown(data.session, data.summary, format);
+    markdown += "---\n\n";
+  }
+
+  // エラーがあれば追記
+  if (failedData.length > 0) {
+    markdown += `\n**注意**: 以下のセッションは取得できませんでした:\n`;
+    for (const data of failedData) {
+      markdown += `- ${data.id}: ${data.error}\n`;
     }
   }
 
   // 現在のセッションに注入したコンテキストを記録
   try {
     const currentSessionId = await resolveCurrentSession();
-    if (currentSessionId && results.length > 0) {
-      // 注入したコンテキストの要約を作成
-      const injectedSessions = results
-        .filter((r) => !r.error)
-        .map((r) => `- ${r.name} (${r.id})`)
-        .join("\n");
-
-      const injectedContent = results
-        .filter((r) => !r.error)
-        .map((r) => {
-          let content = `## ${r.name} (${r.id})\n`;
-          if (r.summary) content += `Summary: ${r.summary}\n`;
-          if (r.changes && r.changes.length > 0) {
-            content += `Changes:\n${r.changes.map((c) => `- ${c}`).join("\n")}\n`;
-          }
-          if (r.decisions && r.decisions.length > 0) {
-            content += `Decisions:\n${r.decisions.map((d) => `- ${d}`).join("\n")}\n`;
-          }
-          return content;
-        })
-        .join("\n---\n");
-
+    if (currentSessionId && successfulData.length > 0) {
       await createObservation(currentSessionId, {
         type: "note",
-        title: `Context Injected: ${results.filter((r) => !r.error).length} session(s)`,
-        content: injectedContent,
+        title: `Context Injected: ${successfulData.length} session(s)`,
+        content: markdown,
         metadata: {
           source: "cnthub:get",
           sessionIds: sessionIds,
@@ -863,23 +888,18 @@ async function injectContext({ sessionIds, format = "summary" }) {
         },
       });
 
-      // Edge作成（UI同期用）- 各セッションからcurrentSessionへのEdgeを作成
-      // これによりWebSocket経由でUIに通知される
-      const successfulSessionIds = results
-        .filter((r) => !r.error)
-        .map((r) => r.id);
-
-      for (const sourceSessionId of successfulSessionIds) {
+      // Edge作成（UI同期用）
+      for (const data of successfulData) {
+        const sourceSessionId = data.session.sessionId || data.session.id;
         await createEdgeApi(sourceSessionId, currentSessionId);
       }
     }
   } catch (error) {
-    // 記録に失敗しても注入自体は成功とする
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[cnthub] Failed to record injected context: ${message}`);
   }
 
-  return results;
+  return markdown;
 }
 
 /**
