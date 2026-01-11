@@ -2,12 +2,12 @@
  * CLAUDE.md 修正エージェント
  *
  * CLAUDE.md を100行以内に最適化する。
- * 長いセクションを rules/ や references/ に分離し、
- * 元のファイルには参照リンクを追加する。
+ * 長いセクションを Agent-docs/ に分離し、
+ * 元のファイルには参照テーブルを追加する。
  */
 
 import { mkdirSync, existsSync } from "fs";
-import { join, dirname } from "path";
+import { join, dirname, basename } from "path";
 import type { ExtractedFile } from "@claude-cnthub/shared";
 import type { ClaudeMdAnalysis } from "./claude-md-reader";
 
@@ -27,6 +27,14 @@ export interface ClaudeMdOptimizeResult {
   lineCountAfter: number;
   /** エラーメッセージ */
   error?: string;
+}
+
+/**
+ * 抽出情報（参照テーブル生成用）
+ */
+interface ExtractionInfo {
+  targetPath: string;
+  sectionName: string;
 }
 
 /**
@@ -56,11 +64,12 @@ export async function optimizeClaudeMd(
   try {
     // 抽出ファイルを作成
     const extractedFiles: ExtractedFile[] = [];
+    const extractionInfos: ExtractionInfo[] = [];
     let optimizedContent = analysis.content;
 
     for (const candidate of analysis.extractionCandidates) {
-      // 抽出先ディレクトリを作成
-      const targetPath = join(projectPath, ".claude", candidate.targetPath);
+      // 抽出先ディレクトリを作成（Agent-docs/ はプロジェクトルート直下）
+      const targetPath = join(projectPath, candidate.targetPath);
       const targetDir = dirname(targetPath);
       if (!existsSync(targetDir)) {
         mkdirSync(targetDir, { recursive: true });
@@ -69,20 +78,26 @@ export async function optimizeClaudeMd(
       // 抽出ファイルの内容を準備
       const extractedContent = formatExtractedContent(candidate.content);
 
+      // セクション名を抽出
+      const sectionName = extractSectionName(candidate.content);
+
       extractedFiles.push({
         path: candidate.targetPath,
         content: extractedContent,
         referenceType: candidate.type,
       });
 
-      // 元のコンテンツから抽出部分を参照リンクに置換
-      optimizedContent = replaceWithReference(
-        optimizedContent,
-        candidate.content,
-        candidate.targetPath,
-        candidate.type
-      );
+      extractionInfos.push({
+        targetPath: candidate.targetPath,
+        sectionName,
+      });
+
+      // 元のコンテンツから抽出部分を削除
+      optimizedContent = removeSection(optimizedContent, candidate.content);
     }
+
+    // 参照テーブルを追加
+    optimizedContent = addReferenceTable(optimizedContent, extractionInfos);
 
     const lineCountAfter = optimizedContent.split("\n").length;
 
@@ -106,6 +121,14 @@ export async function optimizeClaudeMd(
 }
 
 /**
+ * セクション名を抽出
+ */
+function extractSectionName(content: string): string {
+  const headerMatch = content.match(/^##\s+(.+)$/m);
+  return headerMatch ? headerMatch[1].trim() : "詳細";
+}
+
+/**
  * 抽出されたコンテンツをフォーマット
  */
 function formatExtractedContent(content: string): string {
@@ -119,29 +142,22 @@ function formatExtractedContent(content: string): string {
 }
 
 /**
- * コンテンツを参照リンクに置換
+ * セクションを削除
  */
-function replaceWithReference(
-  content: string,
-  extractedContent: string,
-  targetPath: string,
-  type: "rule" | "reference" | "example"
-): string {
+function removeSection(content: string, sectionContent: string): string {
   // セクションヘッダーを抽出
-  const headerMatch = extractedContent.match(/^(##\s+.+)$/m);
+  const headerMatch = sectionContent.match(/^(##\s+.+)$/m);
   const header = headerMatch ? headerMatch[1] : "";
 
-  // 元のコンテンツを参照リンクで置換
-  // セクション全体を置換（ヘッダー + 内容）
-  const sectionPattern = createSectionPattern(header);
-
-  if (sectionPattern && content.includes(extractedContent.trim())) {
-    // 完全一致で置換を試みる
-    const replacement = createReplacementText(header, targetPath);
-    return content.replace(extractedContent.trim(), replacement);
+  // 完全一致で削除を試みる
+  if (content.includes(sectionContent.trim())) {
+    return content
+      .replace(sectionContent.trim(), "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
 
-  // セクションヘッダーを探して、その後の内容を置換
+  // セクションヘッダーを探して削除
   if (header) {
     const lines = content.split("\n");
     const headerIndex = lines.findIndex(
@@ -158,43 +174,54 @@ function replaceWithReference(
         }
       }
 
-      // 置換テキストを作成
-      const replacement = createReplacementText(header, targetPath);
+      // セクションを削除
       const newLines = [
         ...lines.slice(0, headerIndex),
-        replacement,
-        "",
         ...lines.slice(endIndex),
       ];
-
-      return newLines.join("\n").replace(/\n{3,}/g, "\n\n");
+      return newLines
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
     }
   }
 
-  // 置換できなかった場合は末尾に参照を追加
-  const referenceNote = `\n→ 詳細: ${targetPath}\n`;
-  return content + referenceNote;
+  return content;
 }
 
 /**
- * セクションのパターンを作成
+ * 参照テーブルを追加
  */
-function createSectionPattern(header: string): RegExp | null {
-  if (!header) return null;
-
-  const escapedHeader = header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`${escapedHeader}[\\s\\S]*?(?=\\n##\\s|$)`, "m");
-}
-
-/**
- * 置換テキストを作成
- */
-function createReplacementText(header: string, targetPath: string): string {
-  if (header) {
-    // セクション名を保持し、参照リンクを追加
-    const sectionName = header.replace(/^##\s+/, "");
-    return `## ${sectionName}\n\n→ 詳細: ${targetPath}`;
+function addReferenceTable(
+  content: string,
+  extractionInfos: ExtractionInfo[]
+): string {
+  if (extractionInfos.length === 0) {
+    return content;
   }
 
-  return `→ 詳細: ${targetPath}`;
+  // 既存の参照セクションがあれば削除
+  const existingRefPattern = /\n## 参照先[\s\S]*$/;
+  let cleanedContent = content.replace(existingRefPattern, "").trim();
+
+  // 参照テーブルを生成
+  const tableRows = extractionInfos
+    .map((info) => {
+      const fileName = basename(info.targetPath);
+      return `| [${fileName}](${info.targetPath}) | ${info.sectionName} |`;
+    })
+    .join("\n");
+
+  const referenceSection = `
+
+## 参照先
+
+### 詳細仕様: \`Agent-docs/\`
+
+| ドキュメント | 内容 |
+|-------------|------|
+${tableRows}
+`;
+
+  return cleanedContent + referenceSection;
 }

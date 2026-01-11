@@ -220,7 +220,7 @@ export async function getHooks(
 /**
  * MCP Servers を取得
  *
- * MCP Servers は global と plugin のみ（project には存在しない）
+ * MCP Servers は global, project, plugin すべてから取得
  */
 export async function getMcpServers(
   options: SystemContextOptions = {}
@@ -230,17 +230,25 @@ export async function getMcpServers(
 
   const servers: SystemMcpServer[] = [];
 
-  // project source の場合は空を返す（MCP は project にない）
-  if (source === "project") {
-    return servers;
-  }
-
   // グローバル MCP Servers
   if (matchesSource("global", source)) {
     const globalPath = getGlobalPath();
     const globalMcpPath = join(globalPath, "mcp.json");
     const globalServers = await readMcpServersFromJson(globalMcpPath, "global");
     servers.push(...globalServers);
+  }
+
+  // プロジェクト MCP Servers
+  if (matchesSource("project", source)) {
+    const projectClaudePath = getProjectClaudePath(projectPath);
+    if (projectClaudePath) {
+      const projectMcpPath = join(projectClaudePath, "mcp.json");
+      const projectServers = await readMcpServersFromJson(
+        projectMcpPath,
+        "project"
+      );
+      servers.push(...projectServers);
+    }
   }
 
   // プラグイン MCP Servers

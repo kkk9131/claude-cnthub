@@ -119,7 +119,7 @@ ${longSection}
       expect(result.extractionCandidates.length).toBeGreaterThan(0);
       const candidate = result.extractionCandidates[0];
       expect(candidate.type).toBe("rule");
-      expect(candidate.targetPath).toContain("rules/");
+      expect(candidate.targetPath).toContain("Agent-docs/");
     });
 
     it("should return empty analysis when CLAUDE.md does not exist", async () => {

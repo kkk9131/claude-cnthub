@@ -628,16 +628,13 @@ export function ViewerPage() {
               className="h-full"
             >
               <SystemContextManager
-                onOptimize={async (category, items) => {
-                  console.log("[System] Optimize requested:", category, items);
-
-                  const project = projects.find(
-                    (p) => p.projectId === selectedProjectId
+                onOptimize={async (category, items, projectPath) => {
+                  console.log(
+                    "[System] Optimize requested:",
+                    category,
+                    items,
+                    projectPath
                   );
-                  if (!project?.path) {
-                    alert("プロジェクトを選択してください");
-                    return;
-                  }
 
                   const skillsRelatedCategories = [
                     "skills",
@@ -651,8 +648,9 @@ export function ViewerPage() {
                     ? ["skills", "claude-md"]
                     : ["claude-md"];
 
+                  // グローバル設定の場合は "~" を送信（バックエンドで展開）
                   const result = await startOptimize({
-                    projectPath: project.path,
+                    projectPath: projectPath || "~",
                     targets,
                   });
 

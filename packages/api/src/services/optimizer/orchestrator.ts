@@ -8,6 +8,7 @@
  * - 評価失敗時は最大2回リトライ
  */
 
+import { homedir } from "os";
 import { generateId } from "../../repositories/base";
 import type {
   OptimizeRequest,
@@ -49,6 +50,14 @@ export async function runOptimization(
   const errors: string[] = [];
   let retryCount = 0;
 
+  // プロジェクトパスを正規化（"~" をホームディレクトリに展開）
+  const projectPath =
+    request.projectPath === "~"
+      ? homedir()
+      : request.projectPath.startsWith("~/")
+        ? request.projectPath.replace("~", homedir())
+        : request.projectPath;
+
   // 空のターゲットの場合は早期リターン
   if (request.targets.length === 0) {
     return {
@@ -83,13 +92,13 @@ export async function runOptimization(
 
     if (request.targets.includes("claude-md")) {
       updateProgress("claude-md-reader", "running", "CLAUDE.md を分析中");
-      claudeMdAnalysis = await readClaudeMd(request.projectPath);
+      claudeMdAnalysis = await readClaudeMd(projectPath);
       updateProgress("claude-md-reader", "completed", "分析完了");
     }
 
     if (request.targets.includes("skills")) {
       updateProgress("skills-reader", "running", "Skills を分析中");
-      skillsAnalyses = await readSkills(request.projectPath);
+      skillsAnalyses = await readSkills(projectPath);
       updateProgress("skills-reader", "completed", "分析完了");
     }
 
@@ -101,17 +110,14 @@ export async function runOptimization(
       updateProgress("claude-md-optimizer", "running", "CLAUDE.md を最適化中");
       claudeMdOptimizeResult = await optimizeClaudeMd(
         claudeMdAnalysis,
-        request.projectPath
+        projectPath
       );
       updateProgress("claude-md-optimizer", "completed", "最適化完了");
     }
 
     if (skillsAnalyses.length > 0) {
       updateProgress("skills-optimizer", "running", "Skills を最適化中");
-      skillsOptimizeResults = await optimizeSkills(
-        skillsAnalyses,
-        request.projectPath
-      );
+      skillsOptimizeResults = await optimizeSkills(skillsAnalyses, projectPath);
       updateProgress("skills-optimizer", "completed", "最適化完了");
     }
 
@@ -132,7 +138,7 @@ export async function runOptimization(
         );
         claudeMdEvaluation = await evaluateClaudeMd(
           claudeMdOptimizeResult,
-          request.projectPath
+          projectPath
         );
 
         if (!claudeMdEvaluation.passed) {
@@ -141,7 +147,7 @@ export async function runOptimization(
             // リトライ: 再最適化
             claudeMdOptimizeResult = await optimizeClaudeMd(
               claudeMdAnalysis!,
-              request.projectPath
+              projectPath
             );
           }
         }
@@ -163,7 +169,7 @@ export async function runOptimization(
         );
         skillsEvaluations = await evaluateSkills(
           skillsOptimizeResults,
-          request.projectPath
+          projectPath
         );
 
         const failedSkills = skillsEvaluations.filter((e) => !e.passed);
@@ -176,7 +182,7 @@ export async function runOptimization(
             );
             const reoptimized = await optimizeSkills(
               failedAnalyses,
-              request.projectPath
+              projectPath
             );
 
             // 結果をマージ
@@ -270,9 +276,17 @@ export async function runOptimization(
  */
 export async function applyChanges(
   changes: OptimizeChange[],
-  projectPath: string
+  inputProjectPath: string
 ): Promise<{ success: boolean; errors: string[] }> {
   const errors: string[] = [];
+
+  // プロジェクトパスを正規化（"~" をホームディレクトリに展開）
+  const projectPath =
+    inputProjectPath === "~"
+      ? homedir()
+      : inputProjectPath.startsWith("~/")
+        ? inputProjectPath.replace("~", homedir())
+        : inputProjectPath;
 
   try {
     const { writeFileSync, mkdirSync } = await import("fs");
