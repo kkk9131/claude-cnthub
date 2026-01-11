@@ -63,3 +63,6 @@ Plans.md
 TASKS.md
 ARCHIVE.md
 AGENTS.md
+
+# Development scripts (local only)
+packages/api/scripts/
