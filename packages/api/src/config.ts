@@ -24,7 +24,11 @@ const configSchema = z.object({
 
   /** データベース設定 */
   database: z.object({
-    path: z.string().default(":memory:"),
+    path: z
+      .string()
+      .default(
+        `${process.env.HOME || process.env.USERPROFILE || ""}/.claude-cnthub/data.db`
+      ),
   }),
 
   /** WebSocket 設定 */

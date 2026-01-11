@@ -37,6 +37,7 @@ const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 const PID_FILE = path.join(CONFIG_DIR, "server.pid");
 const WEB_PID_FILE = path.join(CONFIG_DIR, "web.pid");
 const TRANSCRIPT_CACHE_FILE = path.join(CONFIG_DIR, "transcript-cache.json");
+const DATABASE_PATH = path.join(CONFIG_DIR, "data.db");
 
 // デフォルト設定
 const DEFAULT_CONFIG = {
@@ -499,7 +500,7 @@ async function startServer() {
           cwd: apiDir,
           detached: true,
           stdio: "ignore",
-          env: { ...process.env, NODE_ENV: "production" },
+          env: { ...process.env, NODE_ENV: "production", DATABASE_PATH },
         });
         child.unref();
         if (child.pid) savePid(child.pid);
@@ -525,6 +526,7 @@ async function startServer() {
       env: {
         ...process.env,
         NODE_ENV: "production",
+        DATABASE_PATH,
       },
     });
 
