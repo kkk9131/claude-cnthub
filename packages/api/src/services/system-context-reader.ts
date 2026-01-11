@@ -69,7 +69,9 @@ export function parseSkillFrontMatter(content: string): SkillMetadata {
 /**
  * ディレクトリから Skills を読み取る
  *
- * ディレクトリ構造: skills/{skill-name}/SKILL.md
+ * 対応するディレクトリ構造:
+ * 1. skills/{skill-name}/SKILL.md (推奨)
+ * 2. skills/{skill-name}.md (直接配置)
  */
 export async function readSkillsFromDir(
   dir: string,
@@ -86,33 +88,56 @@ export async function readSkillsFromDir(
 
     for (const entry of entries) {
       const entryPath = join(dir, entry);
+      const stat = statSync(entryPath);
 
-      // ディレクトリのみ処理
-      if (!statSync(entryPath).isDirectory()) {
+      // パターン1: サブディレクトリ内の SKILL.md
+      if (stat.isDirectory()) {
+        const skillMdPath = join(entryPath, "SKILL.md");
+        if (!existsSync(skillMdPath)) {
+          continue;
+        }
+
+        try {
+          const content = readFileSync(skillMdPath, "utf-8");
+          const metadata = parseSkillFrontMatter(content);
+
+          skills.push({
+            name: metadata.name || entry,
+            description: metadata.description,
+            source,
+            path: skillMdPath,
+            allowedTools:
+              metadata.allowedTools.length > 0
+                ? metadata.allowedTools
+                : undefined,
+          });
+        } catch (error) {
+          console.warn(`Failed to read skill at ${skillMdPath}:`, error);
+        }
         continue;
       }
 
-      const skillMdPath = join(entryPath, "SKILL.md");
-      if (!existsSync(skillMdPath)) {
-        continue;
-      }
+      // パターン2: 直接配置された .md ファイル
+      if (stat.isFile() && entry.endsWith(".md") && entry !== "SKILL.md") {
+        try {
+          const content = readFileSync(entryPath, "utf-8");
+          const metadata = parseSkillFrontMatter(content);
+          // ファイル名から .md を除去してスキル名とする
+          const skillName = basename(entry, ".md");
 
-      try {
-        const content = readFileSync(skillMdPath, "utf-8");
-        const metadata = parseSkillFrontMatter(content);
-
-        skills.push({
-          name: metadata.name || entry,
-          description: metadata.description,
-          source,
-          path: skillMdPath,
-          allowedTools:
-            metadata.allowedTools.length > 0
-              ? metadata.allowedTools
-              : undefined,
-        });
-      } catch (error) {
-        console.warn(`Failed to read skill at ${skillMdPath}:`, error);
+          skills.push({
+            name: metadata.name || skillName,
+            description: metadata.description,
+            source,
+            path: entryPath,
+            allowedTools:
+              metadata.allowedTools.length > 0
+                ? metadata.allowedTools
+                : undefined,
+          });
+        } catch (error) {
+          console.warn(`Failed to read skill at ${entryPath}:`, error);
+        }
       }
     }
   } catch (error) {
@@ -277,7 +302,7 @@ export async function readHooksFromHooksJson(
  */
 export async function readMcpServersFromJson(
   jsonPath: string,
-  source: Exclude<SystemContextSource, "project">
+  source: SystemContextSource
 ): Promise<SystemMcpServer[]> {
   const servers: SystemMcpServer[] = [];
 

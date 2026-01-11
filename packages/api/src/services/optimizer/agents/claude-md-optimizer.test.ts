@@ -144,7 +144,9 @@ ${longContent}
 
       const result = await optimizeClaudeMd(analysis, testDir);
 
-      expect(result.optimizedContent).toContain("→ 詳細:");
+      // 参照テーブル形式で出力される
+      expect(result.optimizedContent).toContain("## 参照先");
+      expect(result.optimizedContent).toContain("| ドキュメント | 内容 |");
       expect(result.optimizedContent).toContain(
         "references/detailed-section.md"
       );

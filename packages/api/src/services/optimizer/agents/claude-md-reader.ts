@@ -154,6 +154,7 @@ function identifyExtractionCandidates(
 
   // 長いセクションを抽出候補として追加
   const SECTION_THRESHOLD = 20; // 20行以上のセクションは抽出候補
+  let candidateIndex = 0;
 
   for (const section of sectionPositions) {
     const sectionLength = section.end - section.start + 1;
@@ -162,7 +163,11 @@ function identifyExtractionCandidates(
         .slice(section.start, section.end + 1)
         .join("\n");
       const targetType = determineReferenceType(section.name);
-      const targetPath = generateTargetPath(section.name, targetType);
+      const targetPath = generateTargetPath(
+        section.name,
+        targetType,
+        candidateIndex
+      );
 
       candidates.push({
         content: sectionContent,
@@ -170,6 +175,7 @@ function identifyExtractionCandidates(
         type: targetType,
         reason: `セクション「${section.name}」は${sectionLength}行あり、分離を推奨します`,
       });
+      candidateIndex++;
     }
   }
 
@@ -178,10 +184,13 @@ function identifyExtractionCandidates(
 
 /**
  * 抽出先パスを生成
+ *
+ * Agent-docs/ フォルダに連番付きで出力する
  */
 function generateTargetPath(
   sectionName: string,
-  type: "rule" | "reference" | "example"
+  _type: "rule" | "reference" | "example",
+  index: number = 0
 ): string {
   // セクション名をファイル名に変換（kebab-case）
   const fileName = sectionName
@@ -190,11 +199,8 @@ function generateTargetPath(
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
 
-  const dirMap = {
-    rule: "rules",
-    reference: "references",
-    example: "examples",
-  };
+  // 連番を付与（01-, 02-, ...）
+  const paddedIndex = String(index + 1).padStart(2, "0");
 
-  return `${dirMap[type]}/${fileName}.md`;
+  return `Agent-docs/${paddedIndex}-${fileName}.md`;
 }

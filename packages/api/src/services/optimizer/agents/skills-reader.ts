@@ -6,8 +6,8 @@
  * 読み取り専用操作のみを行い、ファイルの変更は行わない。
  */
 
-import { existsSync, readdirSync, readFileSync } from "fs";
-import { join, basename } from "path";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { join, basename, dirname } from "path";
 import type {
   AnalysisResult,
   ExtractionCandidate,
@@ -35,6 +35,10 @@ export interface SkillAnalysis extends AnalysisResult {
 /**
  * 全スキルファイルを読み取り、分析結果を返す
  *
+ * 対応するディレクトリ構造:
+ * 1. skills/{skill-name}/SKILL.md (推奨)
+ * 2. skills/{skill-name}.md (直接配置)
+ *
  * @param projectPath - プロジェクトのルートパス
  * @returns スキル分析結果の配列
  */
@@ -48,17 +52,28 @@ export async function readSkills(
     return [];
   }
 
-  const files = readdirSync(skillsDir);
-  const skillFiles = files.filter(
-    (f) => f.endsWith(".md") && !f.startsWith(".")
-  );
-
+  const entries = readdirSync(skillsDir);
   const analyses: SkillAnalysis[] = [];
 
-  for (const file of skillFiles) {
-    const filePath = join(skillsDir, file);
-    const analysis = analyzeSkillFile(filePath);
-    analyses.push(analysis);
+  for (const entry of entries) {
+    const entryPath = join(skillsDir, entry);
+    const stat = statSync(entryPath);
+
+    // パターン1: サブディレクトリ内の SKILL.md
+    if (stat.isDirectory()) {
+      const skillMdPath = join(entryPath, "SKILL.md");
+      if (existsSync(skillMdPath)) {
+        const analysis = analyzeSkillFile(skillMdPath, entry);
+        analyses.push(analysis);
+      }
+      continue;
+    }
+
+    // パターン2: 直接配置された .md ファイル
+    if (stat.isFile() && entry.endsWith(".md") && !entry.startsWith(".")) {
+      const analysis = analyzeSkillFile(entryPath);
+      analyses.push(analysis);
+    }
   }
 
   return analyses;
@@ -66,12 +81,19 @@ export async function readSkills(
 
 /**
  * 単一スキルファイルを分析
+ *
+ * @param filePath - スキルファイルのパス
+ * @param overrideSkillName - スキル名を上書きする場合に指定（サブディレクトリ名など）
  */
-function analyzeSkillFile(filePath: string): SkillAnalysis {
+function analyzeSkillFile(
+  filePath: string,
+  overrideSkillName?: string
+): SkillAnalysis {
   const content = readFileSync(filePath, "utf-8");
   const lines = content.split("\n");
   const lineCount = lines.length;
-  const skillName = basename(filePath, ".md");
+  // サブディレクトリ構造の場合はディレクトリ名、直接配置の場合はファイル名
+  const skillName = overrideSkillName || basename(filePath, ".md");
 
   // メタデータを抽出
   const trigger = extractMetadata(content, "trigger");

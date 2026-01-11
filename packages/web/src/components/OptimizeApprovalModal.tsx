@@ -321,20 +321,6 @@ export function OptimizeApprovalModal({
               ))}
             </div>
           )}
-
-          {/* エラー表示 */}
-          {result.errors.length > 0 && (
-            <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-red-400 mb-2">
-                警告・エラー:
-              </h4>
-              <ul className="text-sm text-red-300 list-disc list-inside">
-                {result.errors.map((error, idx) => (
-                  <li key={idx}>{error}</li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
 
         {/* フッター */}

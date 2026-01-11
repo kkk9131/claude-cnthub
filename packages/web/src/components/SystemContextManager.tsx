@@ -55,7 +55,11 @@ const categoryColors: Record<Category, string> = {
 };
 
 interface SystemContextManagerProps {
-  onOptimize?: (category: Category, items: string[]) => void;
+  onOptimize?: (
+    category: Category,
+    items: string[],
+    projectPath?: string
+  ) => void;
 }
 
 export function SystemContextManager({
@@ -288,10 +292,13 @@ export function SystemContextManager({
         {onOptimize && (
           <button
             onClick={() =>
-              onOptimize(activeCategory, Array.from(selectedItems))
+              onOptimize(
+                activeCategory,
+                Array.from(selectedItems),
+                sourceProjectPath
+              )
             }
-            disabled={selectedItems.size === 0}
-            className="px-3 py-2 rounded-lg text-sm font-medium bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-400)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-2 rounded-lg text-sm font-medium bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-400)] transition-colors"
           >
             最適化
           </button>
