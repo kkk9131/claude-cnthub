@@ -23,6 +23,7 @@ import { injectRouter } from "./routes/inject";
 import { edgesRouter } from "./routes/edges";
 import { systemContextRouter } from "./routes/system-context";
 import { feedbackRouter } from "./routes/feedback";
+import { optimizeRouter } from "./routes/optimize";
 
 // Viewer UI の静的ファイルパスを解決
 // バンドル版: plugin/scripts/worker-api.js → ../ui
@@ -107,6 +108,9 @@ export function createApp(): Hono {
 
   // Feedback API（フィードバック受付）
   newApp.route("/api/feedback", feedbackRouter);
+
+  // Optimize API（最適化エージェント）
+  newApp.route("/api/optimize", optimizeRouter);
 
   // Viewer UI 静的配信 (R-10)
   // /viewer/* で plugin/ui/ の静的ファイルを配信
