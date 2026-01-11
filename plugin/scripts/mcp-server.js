@@ -8,6 +8,12 @@
  * - list_sessions: Get session index (Level 0)
  * - get_session: Get session details (Level 1)
  * - inject_context: Inject context from past sessions
+ * - list_observations: List observations for a session
+ * - export_observations: Export observations as a new session
+ * - get_connected_sessions: Get context from UI-connected sessions
+ * - approve_suggest: Approve suggested failed sessions
+ * - dismiss_suggest: Dismiss suggested failed sessions
+ * - save_pending_context: Save context for auto-injection after /clear
  */
 
 const readline = require("readline");
@@ -68,13 +74,16 @@ async function fetchWithTimeout(url, options = {}, timeout = FETCH_TIMEOUT) {
  * @returns {Array} アイテム配列
  */
 function extractItems(data) {
-  return Array.isArray(data)
-    ? data
-    : Array.isArray(data.items)
-      ? data.items
-      : Array.isArray(data.results)
-        ? data.results
-        : [];
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (Array.isArray(data.items)) {
+    return data.items;
+  }
+  if (Array.isArray(data.results)) {
+    return data.results;
+  }
+  return [];
 }
 
 // Tool definitions
@@ -259,6 +268,21 @@ const TOOLS = [
       properties: {},
     },
   },
+  {
+    name: "save_pending_context",
+    description:
+      "Save remaining context for auto-injection after /clear. Used by /cnthub:export when user chooses 'yes' to save remaining context.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        context: {
+          type: "string",
+          description: "Context text to save for later injection",
+        },
+      },
+      required: ["context"],
+    },
+  },
 ];
 
 /**
@@ -369,6 +393,10 @@ async function handleToolCall(params, id) {
 
       case "dismiss_suggest":
         result = await dismissSuggest(args);
+        break;
+
+      case "save_pending_context":
+        result = await savePendingContext(args);
         break;
 
       default:
@@ -1087,6 +1115,61 @@ async function dismissSuggest() {
   return {
     success: true,
     message: "失敗セッションの提案を却下しました。",
+  };
+}
+
+/**
+ * 残りのコンテキストを pending_inject に保存
+ * /clear 後の次のメッセージで自動注入される
+ * @param {Object} options - オプション
+ * @param {string} options.context - 保存するコンテキスト
+ * @returns {Promise<Object>} 保存結果
+ */
+async function savePendingContext({ context }) {
+  // 入力バリデーション
+  if (!context || typeof context !== "string") {
+    return {
+      success: false,
+      message: "コンテキストが指定されていません。",
+    };
+  }
+
+  // 現在のセッション ID を解決
+  const currentSessionId = await resolveCurrentSession();
+  if (!currentSessionId) {
+    return {
+      success: false,
+      message:
+        "現在のセッションが見つかりません。アクティブなセッションがありません。",
+    };
+  }
+
+  // pending_inject API を呼び出し
+  const response = await fetchWithTimeout(`${API_URL}/api/inject/pending`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId: currentSessionId,
+      context: context,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error(
+      `[cnthub] Failed to save pending context: ${response.status}`
+    );
+    throw new Error(
+      "Failed to save pending context. Please check the API server."
+    );
+  }
+
+  const result = await response.json();
+
+  return {
+    success: true,
+    message: `コンテキストを保存しました。/clear 後の次のメッセージで自動注入されます。`,
+    sessionId: result.sessionId,
+    expiresAt: result.expiresAt,
   };
 }
 

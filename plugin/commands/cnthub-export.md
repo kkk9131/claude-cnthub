@@ -11,6 +11,7 @@ description: 現在のセッションの観測をエクスポート
 
 - `list_observations` - 観測一覧取得 (`sessionId: "current"`)
 - `export_observations` - グループをエクスポート
+- `save_pending_context` - 残りコンテキストを保存（自動復元用）
 
 ## ワークフロー
 
@@ -89,14 +90,15 @@ description: 現在のセッションの観測をエクスポート
 観測を新規セッションにコピーしました。現在のコンテキストは変更されていません。
 ```
 
-## コンテキスト保存API
+## コンテキスト保存
 
-「はい」選択時、残りの観測を保存:
+「はい」選択時、`save_pending_context` MCP ツールを使用:
 
-```bash
-POST http://localhost:3048/api/inject/pending
-{ "sessionId": "<session_id>", "context": "<formatted_context>" }
 ```
+save_pending_context({ context: "<formatted_remaining_context>" })
+```
+
+これにより、`/clear` 後の次のメッセージで残りのコンテキストが自動注入される。
 
 ## エラー
 
