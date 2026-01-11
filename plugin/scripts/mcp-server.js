@@ -259,6 +259,49 @@ const TOOLS = [
       properties: {},
     },
   },
+  {
+    name: "fork_session",
+    description:
+      "Fork the current session to create a parallel branch. Creates a new session with the same context, optionally with a git worktree for code isolation. Use this when the user runs /cnthub:fork.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: {
+          type: "string",
+          description:
+            "Session ID to fork. Use 'current' for the current session.",
+        },
+        name: {
+          type: "string",
+          description:
+            "Name for the forked session (e.g., 'A案: GraphQL実装'). Auto-generated if not specified.",
+        },
+        createWorktree: {
+          type: "boolean",
+          description:
+            "Create a git worktree for code isolation. Default: false.",
+          default: false,
+        },
+      },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "list_forks",
+    description:
+      "List all forked sessions from a parent session. Shows the fork tree.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: {
+          type: "string",
+          description:
+            "Parent session ID to list forks from. Use 'current' for the current session.",
+        },
+      },
+      required: ["sessionId"],
+    },
+  },
 ];
 
 /**
@@ -369,6 +412,14 @@ async function handleToolCall(params, id) {
 
       case "dismiss_suggest":
         result = await dismissSuggest(args);
+        break;
+
+      case "fork_session":
+        result = await forkSession(args);
+        break;
+
+      case "list_forks":
+        result = await listForks(args);
         break;
 
       default:
@@ -1067,6 +1118,176 @@ async function dismissSuggest() {
   return {
     success: true,
     message: "失敗セッションの提案を却下しました。",
+  };
+}
+
+/**
+ * セッションを分岐
+ * @param {Object} options - オプション
+ * @param {string} options.sessionId - 分岐元セッションID（'current' で現在のセッション）
+ * @param {string} [options.name] - 分岐後のセッション名
+ * @param {boolean} [options.createWorktree=false] - git worktree を作成するか
+ * @returns {Promise<Object>} 分岐結果
+ */
+async function forkSession({ sessionId, name, createWorktree = false }) {
+  // 入力バリデーション
+  if (!sessionId) {
+    throw new Error("sessionId is required");
+  }
+
+  // 'current' の場合は現在のセッション ID を解決
+  let resolvedSessionId = sessionId;
+  if (sessionId === "current") {
+    resolvedSessionId = await resolveCurrentSession();
+    if (!resolvedSessionId) {
+      return {
+        success: false,
+        message:
+          "現在のセッションが見つかりません。アクティブなセッションがありません。",
+      };
+    }
+  }
+
+  // Fork API を呼び出し
+  const response = await fetchWithTimeout(
+    `${API_URL}/api/sessions/${resolvedSessionId}/fork`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name || undefined,
+        createWorktree: createWorktree,
+      }),
+    }
+  );
+
+  if (response.status === 404) {
+    return {
+      success: false,
+      message: `セッションが見つかりません: ${resolvedSessionId}`,
+    };
+  }
+
+  if (!response.ok) {
+    console.error(`[cnthub] Failed to fork session: ${response.status}`);
+    throw new Error("Failed to fork session. Please check the API server.");
+  }
+
+  const result = await response.json();
+
+  // worktree エラーがある場合
+  if (result.worktreeError) {
+    return {
+      success: true,
+      message: `セッションを分岐しました（worktree作成失敗: ${result.worktreeError}）`,
+      forkedSession: {
+        id: result.forkedSession.sessionId,
+        name: result.forkedSession.name,
+        workingDir: result.forkedSession.workingDir,
+      },
+      parentSession: {
+        id: result.parentSession.sessionId,
+        name: result.parentSession.name,
+      },
+      forkPoint: result.forkPoint,
+      worktreeError: result.worktreeError,
+    };
+  }
+
+  // 成功レスポンス
+  const responseData = {
+    success: true,
+    message: createWorktree
+      ? `セッションを分岐し、worktreeを作成しました`
+      : `セッションを分岐しました`,
+    forkedSession: {
+      id: result.forkedSession.sessionId,
+      name: result.forkedSession.name,
+      workingDir: result.forkedSession.workingDir,
+    },
+    parentSession: {
+      id: result.parentSession.sessionId,
+      name: result.parentSession.name,
+    },
+    forkPoint: result.forkPoint,
+  };
+
+  if (result.worktreePath) {
+    responseData.worktreePath = result.worktreePath;
+    responseData.branchName = result.branchName;
+  }
+
+  return responseData;
+}
+
+/**
+ * 分岐セッション一覧を取得
+ * @param {Object} options - オプション
+ * @param {string} options.sessionId - 親セッションID（'current' で現在のセッション）
+ * @returns {Promise<Object>} 分岐セッション一覧
+ */
+async function listForks({ sessionId }) {
+  // 入力バリデーション
+  if (!sessionId) {
+    throw new Error("sessionId is required");
+  }
+
+  // 'current' の場合は現在のセッション ID を解決
+  let resolvedSessionId = sessionId;
+  if (sessionId === "current") {
+    resolvedSessionId = await resolveCurrentSession();
+    if (!resolvedSessionId) {
+      return {
+        success: false,
+        message:
+          "現在のセッションが見つかりません。アクティブなセッションがありません。",
+        forks: [],
+      };
+    }
+  }
+
+  // Forks API を呼び出し
+  const response = await fetchWithTimeout(
+    `${API_URL}/api/sessions/${resolvedSessionId}/forks`
+  );
+
+  if (response.status === 404) {
+    return {
+      success: false,
+      message: `セッションが見つかりません: ${resolvedSessionId}`,
+      forks: [],
+    };
+  }
+
+  if (!response.ok) {
+    console.error(`[cnthub] Failed to list forks: ${response.status}`);
+    throw new Error("Failed to list forks. Please check the API server.");
+  }
+
+  const result = await response.json();
+  const forks = result.forks || [];
+
+  if (forks.length === 0) {
+    return {
+      success: true,
+      message: "このセッションからの分岐はありません。",
+      parentSessionId: result.parentSessionId,
+      forks: [],
+    };
+  }
+
+  return {
+    success: true,
+    message: `${forks.length}件の分岐セッションが見つかりました。`,
+    parentSessionId: result.parentSessionId,
+    forks: forks.map((f) => ({
+      id: f.sessionId,
+      name: f.name,
+      status: f.status,
+      forkPoint: f.forkPoint,
+      worktreePath: f.worktreePath,
+      createdAt: f.createdAt,
+    })),
   };
 }
 
