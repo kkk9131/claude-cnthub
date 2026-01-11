@@ -8,6 +8,7 @@ export * from "./types/session-index";
 export * from "./types/summary";
 export * from "./types/merge";
 export * from "./types/system-context";
+export * from "./types/optimize";
 
 // Constants
 export * from "./constants";

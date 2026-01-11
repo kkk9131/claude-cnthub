@@ -19,6 +19,7 @@ Claude Code Plugin として動作し、セッション要約・セマンティ�
 - **既存パターン優先**: 新コンポーネントは既存の設計パターンに従う
 - **ダークモード統一**: UI は全てダークテーマで実装
 - **TDD 必須**: 全ての実装はテスト駆動開発で行う（詳細: [05-test.md](Agent-docs/05-test.md)）
+- **Agent SDK 実装時**: Skills, Hooks, Permissions等の実装は [08-agent-sdk-reference.md](Agent-docs/08-agent-sdk-reference.md) を参照
 
 ## 開発コマンド
 
@@ -48,6 +49,7 @@ bun run lint          # リント
 | [05-test.md](Agent-docs/05-test.md) | テスト戦略・カバレッジ目標 |
 | [06-ui.md](Agent-docs/06-ui.md) | 画面設計・コンポーネント構成 |
 | [07-plugin-requirements.md](Agent-docs/07-plugin-requirements.md) | Plugin 要件定義 |
+| [08-agent-sdk-reference.md](Agent-docs/08-agent-sdk-reference.md) | Agent SDK リファレンス（Skills, Hooks, Permissions等） |
 
 ## ディレクトリ構成
 

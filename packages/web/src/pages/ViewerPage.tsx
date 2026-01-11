@@ -26,6 +26,8 @@ import {
 } from "../components/icons";
 import { HelpModal } from "../components/HelpModal";
 import { FeedbackModal } from "../components/FeedbackModal";
+import { OptimizeApprovalModal } from "../components/OptimizeApprovalModal";
+import { useOptimize } from "../hooks/useOptimize";
 
 // ビュータブの型
 type ViewTab = "sessions" | "system";
@@ -107,6 +109,18 @@ export function ViewerPage() {
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [isOptimizeModalOpen, setIsOptimizeModalOpen] = useState(false);
+
+  // 最適化フック
+  const {
+    isRunning: isOptimizing,
+    isApplying: isOptimizeApplying,
+    result: optimizeResult,
+    error: optimizeError,
+    startOptimize,
+    applyChanges: applyOptimizeChanges,
+    reset: resetOptimize,
+  } = useOptimize();
 
   // エディタに表示するセッション（非表示を除外 + プロジェクトフィルタ）
   const visibleSessions = useMemo(
@@ -614,9 +628,39 @@ export function ViewerPage() {
               className="h-full"
             >
               <SystemContextManager
-                onOptimize={(category, items) => {
+                onOptimize={async (category, items) => {
                   console.log("[System] Optimize requested:", category, items);
-                  // TODO: Phase 3 で最適化機能を実装
+
+                  const project = projects.find(
+                    (p) => p.projectId === selectedProjectId
+                  );
+                  if (!project?.path) {
+                    alert("プロジェクトを選択してください");
+                    return;
+                  }
+
+                  const skillsRelatedCategories = [
+                    "skills",
+                    "rules",
+                    "mcp",
+                    "hooks",
+                  ];
+                  const includeSkills =
+                    skillsRelatedCategories.includes(category);
+                  const targets: ("claude-md" | "skills")[] = includeSkills
+                    ? ["skills", "claude-md"]
+                    : ["claude-md"];
+
+                  const result = await startOptimize({
+                    projectPath: project.path,
+                    targets,
+                  });
+
+                  if (result) {
+                    setIsOptimizeModalOpen(true);
+                  } else if (optimizeError) {
+                    alert(`最適化エラー: ${optimizeError}`);
+                  }
                 }}
               />
             </div>
@@ -675,6 +719,31 @@ export function ViewerPage() {
         isOpen={isFeedbackOpen}
         onClose={() => setIsFeedbackOpen(false)}
       />
+
+      {/* 最適化承認モーダル (OPT-10) */}
+      {optimizeResult && (
+        <OptimizeApprovalModal
+          isOpen={isOptimizeModalOpen}
+          onClose={() => {
+            setIsOptimizeModalOpen(false);
+            resetOptimize();
+          }}
+          result={optimizeResult}
+          onApprove={async (changes) => {
+            const success = await applyOptimizeChanges(changes);
+            if (success) {
+              alert("変更を適用しました");
+              setIsOptimizeModalOpen(false);
+              resetOptimize();
+            } else {
+              alert(
+                `変更の適用に失敗しました: ${optimizeError || "不明なエラー"}`
+              );
+            }
+          }}
+          isApplying={isOptimizeApplying}
+        />
+      )}
     </div>
   );
 }
